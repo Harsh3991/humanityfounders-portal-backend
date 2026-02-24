@@ -1,3 +1,4 @@
+console.log("🚀 Application is scaling up...");
 const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
@@ -6,6 +7,14 @@ const morgan = require("morgan");
 
 // Load environment variables
 dotenv.config();
+
+console.log("📅 Environment:", process.env.NODE_ENV);
+if (process.env.MONGO_URI) {
+    const uri = process.env.MONGO_URI;
+    console.log(`🔗 MONGO_URI structure: ${uri.substring(0, 20)}...${uri.substring(uri.length - 20)}`);
+} else {
+    console.log("🔗 MONGO_URI is MISSING!");
+}
 
 // Import config
 const connectDB = require("./config/db");
