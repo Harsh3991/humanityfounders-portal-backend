@@ -15,11 +15,9 @@ const getAllEmployees = async (req, res, next) => {
         let query = {};
 
         // Search by Name or Email
+        // Search by Name or Email using Text Index for better performance
         if (search) {
-            query.$or = [
-                { fullName: { $regex: search, $options: "i" } },
-                { email: { $regex: search, $options: "i" } },
-            ];
+            query.$text = { $search: search };
         }
 
         // Filter by Department

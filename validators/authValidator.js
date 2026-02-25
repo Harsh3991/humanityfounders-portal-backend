@@ -36,9 +36,10 @@ const registerValidator = [
     body("role")
         .notEmpty()
         .withMessage("Role is required")
-        .isIn([ROLES.HR, ROLES.MANAGER, ROLES.EMPLOYEE])
-        .withMessage("Role must be hr, manager, or employee"),
+        .isIn([ROLES.ADMIN, ROLES.HR, ROLES.MANAGER, ROLES.EMPLOYEE])
+        .withMessage("Role must be admin, hr, manager, or employee"),
     body("department")
+        .if((value, { req }) => ["manager", "employee"].includes(req.body.role))
         .notEmpty()
         .withMessage("Department is required")
         .isIn(DEPARTMENTS)

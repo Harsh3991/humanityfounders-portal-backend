@@ -18,7 +18,7 @@ const USER_STATUS = {
 // HR can add: Manager, Employee
 // Manager & Employee: cannot add anyone
 const CREATION_PERMISSIONS = {
-    [ROLES.ADMIN]: [ROLES.HR, ROLES.MANAGER, ROLES.EMPLOYEE],
+    [ROLES.ADMIN]: [ROLES.ADMIN, ROLES.HR, ROLES.MANAGER, ROLES.EMPLOYEE],
     [ROLES.HR]: [ROLES.MANAGER, ROLES.EMPLOYEE],
     [ROLES.MANAGER]: [],
     [ROLES.EMPLOYEE]: [],
@@ -29,7 +29,6 @@ const DEPARTMENTS = [
     "Engineering",
     "Marketing",
     "Sales",
-    "Human Resources",
     "Finance",
     "Operations",
     "Design",
