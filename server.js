@@ -1,4 +1,3 @@
-console.log("🚀 Application is scaling up...");
 const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
@@ -7,14 +6,6 @@ const morgan = require("morgan");
 
 // Load environment variables
 dotenv.config();
-
-console.log("📅 Environment:", process.env.NODE_ENV);
-if (process.env.MONGO_URI) {
-    const uri = process.env.MONGO_URI;
-    console.log(`🔗 MONGO_URI structure: ${uri.substring(0, 20)}...${uri.substring(uri.length - 20)}`);
-} else {
-    console.log("🔗 MONGO_URI is MISSING!");
-}
 
 // Import config
 const connectDB = require("./config/db");
@@ -73,13 +64,11 @@ const PORT = process.env.PORT || 5000;
 connectDB();
 
 // Only listen if not running in a serverless (like Vercel) environment
-if (!process.env.VERCEL) {
-    app.listen(PORT, () => {
-        console.log(`\n🚀 Server running on port ${PORT}`);
-        console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
-        console.log(`🔗 Health check: http://localhost:${PORT}/api/health\n`);
-    });
-}
+app.listen(PORT, () => {
+    console.log(`\n🚀 Server running on port ${PORT}`);
+    console.log(`📡 Environment: ${process.env.NODE_ENV}`);
+    console.log(`🔗 Health check: /api/health\n`);
+});
 
 // Export the Express API for Vercel
 module.exports = app;
