@@ -115,20 +115,39 @@ const getTasksByProject = async (req, res, next) => {
         const tasks = await Task.find(filter)
             .populate("assignee", "fullName email department")
             .populate("createdBy", "fullName email")
-            .sort({ dueDate: 1, priority: -1 });
+            .sort({ dueDate: 1, priority: -1 })
+            .lean();
 
-        // For each top-level task, get subtask count
-        const tasksWithSubCount = await Promise.all(
-            tasks.map(async (task) => {
-                const subtaskCount = await Task.countDocuments({ parentTask: task._id });
-                const subtaskDone = await Task.countDocuments({ parentTask: task._id, status: "done" });
-                return {
-                    ...task.toObject(),
-                    subtaskCount,
-                    subtaskDone,
-                };
-            })
-        );
+        // Fix N+1 Query: Get all subtask stats in a single DB query
+        const taskIds = tasks.map((t) => t._id);
+
+        const subtaskStats = await Task.aggregate([
+            { $match: { parentTask: { $in: taskIds } } },
+            {
+                $group: {
+                    _id: "$parentTask",
+                    subtaskCount: { $sum: 1 },
+                    subtaskDone: { $sum: { $cond: [{ $eq: ["$status", "done"] }, 1, 0] } },
+                },
+            },
+        ]);
+
+        const statsMap = {};
+        subtaskStats.forEach((stat) => {
+            statsMap[stat._id.toString()] = {
+                subtaskCount: stat.subtaskCount,
+                subtaskDone: stat.subtaskDone,
+            };
+        });
+
+        const tasksWithSubCount = tasks.map((task) => {
+            const stats = statsMap[task._id.toString()] || { subtaskCount: 0, subtaskDone: 0 };
+            return {
+                ...task,
+                subtaskCount: stats.subtaskCount,
+                subtaskDone: stats.subtaskDone,
+            };
+        });
 
         res.status(200).json({
             success: true,
@@ -254,7 +273,8 @@ const getMyTasks = async (req, res, next) => {
         const tasks = await Task.find(filter)
             .populate("project", "name")
             .populate("createdBy", "fullName email")
-            .sort({ dueDate: 1 });
+            .sort({ dueDate: 1 })
+            .lean();
 
         res.status(200).json({
             success: true,
@@ -277,7 +297,8 @@ const getTasksByUser = async (req, res, next) => {
 
         const tasks = await Task.find({ assignee: userId, parentTask: null })
             .populate("project", "name status")
-            .sort({ dueDate: 1 });
+            .sort({ dueDate: 1 })
+            .lean();
 
         // Group tasks by project (for Task Oversight view)
         const grouped = {};

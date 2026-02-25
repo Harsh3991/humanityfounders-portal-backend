@@ -63,7 +63,9 @@ const taskSchema = new mongoose.Schema(
 
 // Index for fast lookups
 taskSchema.index({ assignee: 1, status: 1 });
-taskSchema.index({ project: 1 });
+taskSchema.index({ assignee: 1, parentTask: 1, dueDate: 1 }); // Accelerates "My Tasks" on Dashboard
+taskSchema.index({ project: 1, parentTask: 1, priority: -1, dueDate: 1 }); // Accelerates Project page Tasks
+taskSchema.index({ parentTask: 1 }); // Accelerates subtask lookups
 
 const Task = mongoose.model("Task", taskSchema);
 

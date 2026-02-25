@@ -99,12 +99,10 @@ const registerUser = async (creatorUser, userData) => {
         createdBy: creatorUser._id,
     });
 
-    // Send email notification non-blocking (doesn't fail creation if email fails)
-    try {
-        await sendWelcomeEmail(email, fullName, password);
-    } catch (err) {
+    // Fire-and-forget email notification (TRULY non-blocking)
+    sendWelcomeEmail(email, fullName, password).catch((err) => {
         console.error("Failed to send welcome email to", email, err);
-    }
+    });
 
     return newUser.toJSON();
 };

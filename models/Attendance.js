@@ -62,6 +62,8 @@ const attendanceSchema = new mongoose.Schema(
 
 // Compound index: one attendance record per user per day
 attendanceSchema.index({ user: 1, date: 1 }, { unique: true });
+attendanceSchema.index({ date: 1 }); // Boosts full-day dashboard stat lookups
+attendanceSchema.index({ status: 1 }); // Boosts Admin panel "active status" scans
 
 const Attendance = mongoose.model("Attendance", attendanceSchema);
 
