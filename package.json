@@ -11,9 +11,6 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "engines": {
-    "node": "22.x"
-  },
   "type": "commonjs",
   "dependencies": {
     "bcryptjs": "^3.0.3",
