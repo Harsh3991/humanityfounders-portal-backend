@@ -34,8 +34,8 @@ const userSchema = new mongoose.Schema(
 
         department: {
             type: String,
-            required: [true, "Department is required"],
-            enum: DEPARTMENTS,
+            required: function () { return ["manager", "employee"].includes(this.role); },
+            default: "",
         },
 
         status: {
@@ -112,6 +112,10 @@ userSchema.methods.toJSON = function () {
     delete user.__v;
     return user;
 };
+
+userSchema.index({ status: 1 });
+userSchema.index({ department: 1, status: 1 });
+userSchema.index({ "fullName": "text", "email": "text" }); // Add text search index for Admin directory lookups
 
 const User = mongoose.model("User", userSchema);
 

@@ -411,15 +411,19 @@ const getAllUsersStatus = async (req, res, next) => {
             ]
         }).lean();
 
-        // 3. Map status to users
+        // 3. Map status to users with O(1) lookup
+        const activeRecordMap = {};
+        activeRecords.forEach(r => {
+            const rUserId = String(r.user);
+            if (["clocked-in", "away"].includes(r.status)) {
+                activeRecordMap[rUserId] = r;
+            } else if (new Date(r.date).getTime() === start.getTime() && !activeRecordMap[rUserId]) {
+                activeRecordMap[rUserId] = r;
+            }
+        });
+
         const userStatusList = users.map((user) => {
-            const record = activeRecords.find(r =>
-                String(r.user) === String(user._id) &&
-                ["clocked-in", "away"].includes(r.status)
-            ) || activeRecords.find(r =>
-                String(r.user) === String(user._id) &&
-                new Date(r.date).getTime() === start.getTime()
-            );
+            const record = activeRecordMap[String(user._id)];
 
             return {
                 _id: user._id,

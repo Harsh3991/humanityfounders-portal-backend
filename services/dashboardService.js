@@ -163,40 +163,13 @@ const getManagementDashboard = async (userId, userRole) => {
                 .lean(),
 
             // Employees with zero active tasks (Resource Availability)
-            User.aggregate([
-                { $match: teamQuery },
-                {
-                    $lookup: {
-                        from: "tasks",
-                        let: { userId: "$_id" },
-                        pipeline: [
-                            {
-                                $match: {
-                                    $expr: {
-                                        $and: [
-                                            { $eq: ["$assignee", "$$userId"] },
-                                            { $ne: ["$status", "done"] },
-                                        ],
-                                    },
-                                },
-                            },
-                        ],
-                        as: "activeTasks",
-                    },
-                },
-                {
-                    $match: { activeTasks: { $size: 0 } },
-                },
-                {
-                    $project: {
-                        fullName: 1,
-                        email: 1,
-                        department: 1,
-                        role: 1,
-                    },
-                },
-                { $limit: 20 },
-            ]),
+            (async () => {
+                const activeTaskAssignees = await Task.distinct('assignee', { status: { $ne: 'done' } });
+                return User.find({ ...teamQuery, _id: { $nin: activeTaskAssignees } })
+                    .select("fullName email department role")
+                    .limit(20)
+                    .lean();
+            })()
         ]);
 
     return {

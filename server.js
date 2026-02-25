@@ -3,6 +3,7 @@ const dotenv = require("dotenv");
 const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
+const compression = require("compression");
 
 // Load environment variables
 dotenv.config();
@@ -19,6 +20,7 @@ const app = express();
 app.use(helmet()); // Security headers
 app.use(cors(corsOptions)); // CORS
 app.use(morgan("dev")); // Request logging
+app.use(compression()); // Compress all responses
 app.use(express.json({ limit: "10mb" })); // Parse JSON (increased limit for document uploads)
 app.use(express.urlencoded({ extended: true }));
 
