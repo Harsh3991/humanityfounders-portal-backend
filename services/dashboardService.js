@@ -58,7 +58,7 @@ const getEmployeeDashboard = async (userId) => {
 
             // Tasks assigned to user (not done), sorted by due date
             Task.find({
-                assignee: userId,
+                assignees: userId,
                 status: { $ne: "done" },
             })
                 .populate("project", "name")
@@ -164,7 +164,7 @@ const getManagementDashboard = async (userId, userRole) => {
 
             // Employees with zero active tasks (Resource Availability)
             (async () => {
-                const activeTaskAssignees = await Task.distinct('assignee', { status: { $ne: 'done' } });
+                const activeTaskAssignees = await Task.distinct('assignees', { status: { $ne: 'done' } });
                 return User.find({ ...teamQuery, _id: { $nin: activeTaskAssignees } })
                     .select("fullName email department role")
                     .limit(20)

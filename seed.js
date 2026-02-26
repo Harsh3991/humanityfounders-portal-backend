@@ -194,7 +194,7 @@ const seedData = async () => {
                     name: taskName,
                     description: `Detailed task description for ${taskName}`,
                     project: proj._id,
-                    assignee: assignee,
+                    assignees: [assignee],
                     createdBy: proj.createdBy,
                     status: taskStatus,
                     priority: taskPriority,
