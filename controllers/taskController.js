@@ -9,7 +9,7 @@ const { ROLES } = require("../utils/constants");
 // ─────────────────────────────────────────────────
 const createTask = async (req, res, next) => {
     try {
-        const { name, description, project, assignee, dueDate, priority, parentTask } = req.body;
+        const { name, description, project, assignees, dueDate, priority, parentTask } = req.body;
 
         // Verify the project exists
         const projectDoc = await Project.findById(project);
@@ -52,14 +52,14 @@ const createTask = async (req, res, next) => {
             name,
             description,
             project,
-            assignee,
+            assignees: assignees || [],
             dueDate,
             priority: priority || "none",
             parentTask: parentTask || null,
             createdBy: req.user._id,
         });
 
-        await task.populate("assignee", "fullName email department");
+        await task.populate("assignees", "fullName email department");
         await task.populate("createdBy", "fullName email");
         await task.populate("project", "name");
 
@@ -105,7 +105,7 @@ const getTasksByProject = async (req, res, next) => {
         const filter = { project: projectId };
         if (req.query.status) filter.status = req.query.status;
         if (req.query.priority) filter.priority = req.query.priority;
-        if (req.query.assignee) filter.assignee = req.query.assignee;
+        if (req.query.assignee) filter.assignees = req.query.assignee;
 
         // Only get top-level tasks (not subtasks) by default
         if (req.query.topLevel !== "false") {
@@ -113,7 +113,7 @@ const getTasksByProject = async (req, res, next) => {
         }
 
         const tasks = await Task.find(filter)
-            .populate("assignee", "fullName email department")
+            .populate("assignees", "fullName email department")
             .populate("createdBy", "fullName email")
             .sort({ dueDate: 1, priority: -1 })
             .lean();
@@ -166,7 +166,7 @@ const getTasksByProject = async (req, res, next) => {
 const getTaskById = async (req, res, next) => {
     try {
         const task = await Task.findById(req.params.id)
-            .populate("assignee", "fullName email department")
+            .populate("assignees", "fullName email department")
             .populate("createdBy", "fullName email")
             .populate("project", "name");
 
@@ -179,7 +179,7 @@ const getTaskById = async (req, res, next) => {
 
         // Get subtasks
         const subtasks = await Task.find({ parentTask: task._id })
-            .populate("assignee", "fullName email department")
+            .populate("assignees", "fullName email department")
             .sort({ createdAt: 1 });
 
         res.status(200).json({
@@ -201,7 +201,7 @@ const getTaskById = async (req, res, next) => {
 // ─────────────────────────────────────────────────
 const updateTask = async (req, res, next) => {
     try {
-        const { name, description, assignee, dueDate, priority, status } = req.body;
+        const { name, description, assignees, dueDate, priority, status } = req.body;
 
         const task = await Task.findById(req.params.id);
         if (!task) {
@@ -214,7 +214,7 @@ const updateTask = async (req, res, next) => {
         // Update fields
         if (name !== undefined) task.name = name;
         if (description !== undefined) task.description = description;
-        if (assignee !== undefined) task.assignee = assignee;
+        if (assignees !== undefined) task.assignees = assignees;
         if (dueDate !== undefined) task.dueDate = dueDate;
         if (priority !== undefined) task.priority = priority;
 
@@ -244,7 +244,7 @@ const updateTask = async (req, res, next) => {
 
         await task.save();
 
-        await task.populate("assignee", "fullName email department");
+        await task.populate("assignees", "fullName email department");
         await task.populate("createdBy", "fullName email");
         await task.populate("project", "name");
 
@@ -265,7 +265,7 @@ const updateTask = async (req, res, next) => {
 // ─────────────────────────────────────────────────
 const getMyTasks = async (req, res, next) => {
     try {
-        const filter = { assignee: req.user._id, parentTask: null };
+        const filter = { assignees: req.user._id, parentTask: null };
 
         // Optional status filter
         if (req.query.status) filter.status = req.query.status;
@@ -295,7 +295,7 @@ const getTasksByUser = async (req, res, next) => {
     try {
         const { userId } = req.params;
 
-        const tasks = await Task.find({ assignee: userId, parentTask: null })
+        const tasks = await Task.find({ assignees: userId, parentTask: null })
             .populate("project", "name status")
             .sort({ dueDate: 1 })
             .lean();
