@@ -1,5 +1,6 @@
 const Attendance = require("../models/Attendance");
 const User = require("../models/User");
+const googleSheetsService = require("../services/googleSheetsService");
 
 /**
  * Helper: get today's date range
@@ -85,6 +86,15 @@ const clockIn = async (req, res, next) => {
         // Mongoose handles saving
 
         await record.save();
+
+        // --- Automatically Sync to Google Sheets on Clock In ---
+        try {
+            const user = await User.findById(req.user._id).select("fullName");
+            const userName = user ? user.fullName : "Unknown";
+            await googleSheetsService.syncRecordToSheet(userName, record);
+        } catch (syncError) {
+            console.error("Failed to auto-sync clock-in to Google Sheets:", syncError);
+        }
 
         res.status(200).json({
             success: true,
@@ -247,10 +257,11 @@ const clockOut = async (req, res, next) => {
         record.lastActiveAt = null;
 
         // Append report if one exists (for multi-session days)
+        const formattedReport = `[${now.toLocaleTimeString()}]: ${dailyReport.trim()}`;
         if (record.dailyReport) {
-            record.dailyReport += `\n[${now.toLocaleTimeString()}]: ${dailyReport.trim()}`;
+            record.dailyReport += `\n${formattedReport}`;
         } else {
-            record.dailyReport = dailyReport.trim();
+            record.dailyReport = formattedReport;
         }
 
         await record.save();
@@ -260,6 +271,16 @@ const clockOut = async (req, res, next) => {
             (sum, b) => sum + (b.duration || 0),
             0
         );
+
+        // --- Automatically Sync to Google Sheets on Clock Out ---
+        try {
+            const user = await User.findById(req.user._id).select("fullName");
+            const userName = user ? user.fullName : "Unknown";
+            await googleSheetsService.syncRecordToSheet(userName, record);
+        } catch (syncError) {
+            console.error("Failed to auto-sync clock-out to Google Sheets:", syncError);
+            // We intentionally don't throw here so the user still successfully clocks out
+        }
 
         res.status(200).json({
             success: true,
@@ -564,6 +585,53 @@ const adminOverride = async (req, res, next) => {
     }
 };
 
+// ═══════════════════════════════════════════════
+// POST /api/attendance/admin/sync-google-sheet
+// Sync all selected month attendance records to a Google Sheet
+// ═══════════════════════════════════════════════
+const syncGoogleSheet = async (req, res, next) => {
+    try {
+        const now = new Date();
+        const month = parseInt(req.body.month) || now.getMonth() + 1;
+        const year = parseInt(req.body.year) || now.getFullYear();
+
+        const start = new Date(year, month - 1, 1);
+        const end = new Date(year, month, 0, 23, 59, 59, 999);
+
+        // Fetch user data populated
+        const records = await Attendance.find({
+            date: { $gte: start, $lte: end },
+        })
+            .populate("user", "fullName email")
+            .sort({ date: 1 })
+            .lean();
+
+        if (!records.length) {
+            return res.status(404).json({ success: false, message: "No attendance records found for this period to sync." });
+        }
+
+        // Sync each record using the new upsert logic
+        for (const record of records) {
+            const userName = record.user ? record.user.fullName : "Unknown";
+            await googleSheetsService.syncRecordToSheet(userName, record);
+        }
+
+        res.status(200).json({
+            success: true,
+            message: `Successfully synced ${records.length} records to Google Sheet.`,
+            count: records.length
+        });
+
+    } catch (error) {
+        console.error("Google sync error:", error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to sync to Google Sheet. Please check API keys and permissions.",
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     clockIn,
     goAway,
@@ -574,4 +642,5 @@ module.exports = {
     getAllUsersStatus,
     getUserAttendanceHistory,
     adminOverride,
+    syncGoogleSheet,
 };
