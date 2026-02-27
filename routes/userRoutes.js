@@ -7,6 +7,7 @@ const {
     deleteEmployee,
     getEmployeeDocument,
 } = require("../controllers/userController");
+const { getEmployeeWorklog } = require("../controllers/worklogController");
 const protect = require("../middleware/auth");
 const roleAuth = require("../middleware/roleAuth");
 
@@ -17,6 +18,7 @@ router.use(protect);
 // ─── Directory (HR & Admin) ───
 router.get("/", roleAuth("admin", "hr"), getAllEmployees);
 router.get("/:id", roleAuth("admin", "hr"), getEmployeeById);
+router.get("/:id/worklog", roleAuth("admin", "hr"), getEmployeeWorklog);
 router.get("/:id/document/:docType", roleAuth("admin", "hr"), getEmployeeDocument);
 
 // ─── Management (HR & Admin) ───
