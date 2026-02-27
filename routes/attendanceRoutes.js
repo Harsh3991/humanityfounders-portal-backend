@@ -9,7 +9,8 @@ const {
     getHistory,
     getAllUsersStatus,
     getUserAttendanceHistory,
-    adminOverride
+    adminOverride,
+    syncGoogleSheet
 } = require("../controllers/attendanceController");
 const protect = require("../middleware/auth");
 const roleAuth = require("../middleware/roleAuth");
@@ -26,6 +27,9 @@ router.get("/admin/:userId/history", roleAuth("admin", "hr", "manager"), getUser
 
 // Override an attendance day
 router.post("/admin/:userId/override", roleAuth("admin", "hr", "manager"), adminOverride);
+
+// Sync all attendance for a month to Google Sheets
+router.post("/admin/sync-google-sheet", roleAuth("admin", "hr", "manager"), syncGoogleSheet);
 
 // ─── Personal Routes ───
 // Today's status
