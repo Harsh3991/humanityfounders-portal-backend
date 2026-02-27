@@ -7,12 +7,26 @@ const fs = require("fs");
  * Initialize Google Sheets API Client
  * 
  * Supports two modes:
- * 1. (Preferred) GOOGLE_APPLICATION_CREDENTIALS env var pointing to the JSON key file
- * 2. (Fallback)  GOOGLE_SERVICE_ACCOUNT_EMAIL + GOOGLE_PRIVATE_KEY env vars
+ * 1. (Primary)  GOOGLE_SERVICE_ACCOUNT_EMAIL + GOOGLE_PRIVATE_KEY env vars
+ * 2. (Fallback) GOOGLE_APPLICATION_CREDENTIALS env var pointing to JSON key file
  */
 const getAuthClient = () => {
     try {
-        // Mode 1: Use the JSON key file directly (most reliable)
+        // Mode 1: Use individual env vars (works on Heroku, local, everywhere)
+        if (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+            // Handle private key newlines: dotenv with single quotes keeps literal \n,
+            // Heroku also keeps literal \n — this replace converts them to real newlines.
+            // If already real newlines (dotenv double quotes), the replace is a no-op.
+            const privateKey = process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n");
+
+            return new JWT({
+                email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+                key: privateKey,
+                scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+            });
+        }
+
+        // Mode 2: Fallback to JSON key file
         const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
         if (credentialsPath) {
             const resolvedPath = path.resolve(credentialsPath);
@@ -28,19 +42,8 @@ const getAuthClient = () => {
             }
         }
 
-        // Mode 2: Fallback to individual env vars
-        if (!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) {
-            console.error("Missing Google Service Account credentials.");
-            return null;
-        }
-
-        const privateKey = process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n");
-
-        return new JWT({
-            email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-            key: privateKey,
-            scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-        });
+        console.error("Missing Google Service Account credentials. Set GOOGLE_SERVICE_ACCOUNT_EMAIL + GOOGLE_PRIVATE_KEY env vars.");
+        return null;
     } catch (error) {
         console.error("Error creating Google Auth Client:", error);
         return null;
