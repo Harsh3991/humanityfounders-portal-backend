@@ -3,13 +3,27 @@ const User = require("../models/User");
 const googleSheetsService = require("../services/googleSheetsService");
 
 /**
- * Helper: get today's date range
+ * Helper: get today's date range in IST (Asia/Kolkata)
+ * Works correctly regardless of server timezone (UTC on Heroku, IST locally, etc.)
  */
 const getTodayRange = () => {
     const now = new Date();
-    // Use local time for date boundaries
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    // Extract date components in IST
+    const formatter = new Intl.DateTimeFormat('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    });
+    const parts = formatter.formatToParts(now);
+    const get = (type) => parseInt(parts.find(p => p.type === type)?.value || '0');
+    const y = get('year');
+    const m = get('month') - 1; // JS months are 0-indexed
+    const d = get('day');
+
+    // Create boundaries using local constructor so MongoDB queries match
+    const start = new Date(y, m, d);
+    const end = new Date(y, m, d, 23, 59, 59, 999);
     return { start, end };
 };
 
@@ -257,7 +271,7 @@ const clockOut = async (req, res, next) => {
         record.lastActiveAt = null;
 
         // Append report if one exists (for multi-session days)
-        const formattedReport = `[${now.toLocaleTimeString()}]: ${dailyReport.trim()}`;
+        const formattedReport = `[${now.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })}]: ${dailyReport.trim()}`;
         if (record.dailyReport) {
             record.dailyReport += `\n${formattedReport}`;
         } else {
