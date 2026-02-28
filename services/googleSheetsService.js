@@ -78,23 +78,52 @@ const formatHHMMSS = (totalSeconds) => {
 };
 
 /**
- * Format a Date into HH:MM (24hr). If the date is on a different calendar day
- * than recordDate, append "(DD-MM-YYYY)" to flag cross-day.
+ * Helper: get date/time components in IST (Asia/Kolkata) regardless of server timezone.
+ * Returns { year, month (1-12), day, hours (0-23), minutes, seconds }
+ */
+const getISTComponents = (dateObj) => {
+    const d = new Date(dateObj);
+    // Use Intl to extract individual parts in IST
+    const formatter = new Intl.DateTimeFormat('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+    });
+    const parts = formatter.formatToParts(d);
+    const get = (type) => parts.find(p => p.type === type)?.value || '00';
+    return {
+        year: parseInt(get('year')),
+        month: parseInt(get('month')),
+        day: parseInt(get('day')),
+        hours: parseInt(get('hour')),
+        minutes: parseInt(get('minute')),
+        seconds: parseInt(get('second')),
+    };
+};
+
+/**
+ * Format a Date into HH:MM:SS (24hr) in IST. If the date is on a different calendar day
+ * than recordDate (in IST), append "(DD-MM-YYYY)" to flag cross-day.
  */
 const formatTimeWithCrossDay = (dateObj, recordDate) => {
     if (!dateObj) return "-";
-    const d = new Date(dateObj);
-    const timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+    const c = getISTComponents(dateObj);
+    const timeStr = `${String(c.hours).padStart(2, '0')}:${String(c.minutes).padStart(2, '0')}:${String(c.seconds).padStart(2, '0')}`;
 
-    // Check if this timestamp is on a different calendar day than the record's date
+    // Check if this timestamp is on a different calendar day than the record's date (in IST)
     if (recordDate) {
-        const rd = new Date(recordDate);
+        const rc = getISTComponents(recordDate);
         if (
-            d.getFullYear() !== rd.getFullYear() ||
-            d.getMonth() !== rd.getMonth() ||
-            d.getDate() !== rd.getDate()
+            c.year !== rc.year ||
+            c.month !== rc.month ||
+            c.day !== rc.day
         ) {
-            const dayStr = `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+            const dayStr = `${String(c.day).padStart(2, '0')}-${String(c.month).padStart(2, '0')}-${c.year}`;
             return `${timeStr} (${dayStr})`;
         }
     }
@@ -102,12 +131,12 @@ const formatTimeWithCrossDay = (dateObj, recordDate) => {
 };
 
 /**
- * Format the local date as DD-MM-YYYY
+ * Format the date as DD-MM-YYYY in IST
  */
 const formatDateDDMMYYYY = (dateObj) => {
     if (!dateObj) return "";
-    const d = new Date(dateObj);
-    return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+    const c = getISTComponents(dateObj);
+    return `${String(c.day).padStart(2, '0')}-${String(c.month).padStart(2, '0')}-${c.year}`;
 };
 
 /**
@@ -269,7 +298,7 @@ const syncRecordToSheet = async (userName, record) => {
             await sheets.spreadsheets.values.update({
                 spreadsheetId,
                 range: `Sheet1!A${rowIndex}`,
-                valueInputOption: "USER_ENTERED",
+                valueInputOption: "RAW",
                 resource: { values: [newRow] },
             });
         } else {
@@ -277,7 +306,7 @@ const syncRecordToSheet = async (userName, record) => {
             await sheets.spreadsheets.values.append({
                 spreadsheetId,
                 range: "Sheet1!A:A",
-                valueInputOption: "USER_ENTERED",
+                valueInputOption: "RAW",
                 insertDataOption: "INSERT_ROWS",
                 resource: { values: [newRow] },
             });
