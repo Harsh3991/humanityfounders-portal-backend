@@ -20,15 +20,25 @@ const createTask = async (req, res, next) => {
             });
         }
 
-        // Employees can only create tasks in projects they belong to
-        if (
-            req.user.role === ROLES.EMPLOYEE &&
-            !projectDoc.members.some((m) => m.toString() === req.user._id.toString())
-        ) {
-            return res.status(403).json({
-                success: false,
-                message: "You are not a member of this project",
-            });
+        // Employees can only create tasks in projects they belong to or have tasks assigned in
+        if (req.user.role === ROLES.EMPLOYEE) {
+            const isMember = projectDoc.members.some(
+                (m) => m.toString() === req.user._id.toString()
+            );
+
+            if (!isMember) {
+                const assignedTaskCount = await Task.countDocuments({
+                    project: projectDoc._id,
+                    assignees: req.user._id,
+                });
+
+                if (assignedTaskCount === 0) {
+                    return res.status(403).json({
+                        success: false,
+                        message: "You are not a member of this project",
+                    });
+                }
+            }
         }
 
         // If this is a subtask, verify the parent task exists and belongs to the same project
@@ -59,6 +69,13 @@ const createTask = async (req, res, next) => {
             createdBy: req.user._id,
         });
 
+        // Auto-add assignees to the project's members list so they can see the project
+        if (assignees && assignees.length > 0) {
+            await Project.findByIdAndUpdate(project, {
+                $addToSet: { members: { $each: assignees } },
+            });
+        }
+
         await task.populate("assignees", "fullName email department");
         await task.populate("createdBy", "fullName email");
         await task.populate("project", "name");
@@ -81,8 +98,8 @@ const getTasksByProject = async (req, res, next) => {
     try {
         const { projectId } = req.params;
 
-        // Verify project access
-        const project = await Project.findById(projectId);
+        // Verify project access — lean query, only fetch members field for the check
+        const project = await Project.findById(projectId).select("members").lean();
         if (!project) {
             return res.status(404).json({
                 success: false,
@@ -90,15 +107,25 @@ const getTasksByProject = async (req, res, next) => {
             });
         }
 
-        // Employees can only view tasks in their projects
-        if (
-            req.user.role === ROLES.EMPLOYEE &&
-            !project.members.some((m) => m.toString() === req.user._id.toString())
-        ) {
-            return res.status(403).json({
-                success: false,
-                message: "Access denied. You are not a member of this project.",
-            });
+        // Employees can only view tasks in their projects or projects they have tasks in
+        if (req.user.role === ROLES.EMPLOYEE) {
+            const isMember = project.members.some(
+                (m) => m.toString() === req.user._id.toString()
+            );
+
+            if (!isMember) {
+                const assignedTaskCount = await Task.countDocuments({
+                    project: projectId,
+                    assignees: req.user._id,
+                });
+
+                if (assignedTaskCount === 0) {
+                    return res.status(403).json({
+                        success: false,
+                        message: "Access denied. You are not a member of this project.",
+                    });
+                }
+            }
         }
 
         // Optional filters
@@ -118,19 +145,30 @@ const getTasksByProject = async (req, res, next) => {
             .sort({ dueDate: 1, priority: -1 })
             .lean();
 
-        // Fix N+1 Query: Get all subtask stats in a single DB query
+        // When topLevel=false (flat list for tree building), skip subtask stats — they're not needed
+        if (req.query.topLevel === "false") {
+            return res.status(200).json({
+                success: true,
+                count: tasks.length,
+                data: tasks,
+            });
+        }
+
+        // Get subtask stats only for top-level view
         const taskIds = tasks.map((t) => t._id);
 
-        const subtaskStats = await Task.aggregate([
-            { $match: { parentTask: { $in: taskIds } } },
-            {
-                $group: {
-                    _id: "$parentTask",
-                    subtaskCount: { $sum: 1 },
-                    subtaskDone: { $sum: { $cond: [{ $eq: ["$status", "done"] }, 1, 0] } },
+        const subtaskStats = taskIds.length > 0
+            ? await Task.aggregate([
+                { $match: { parentTask: { $in: taskIds } } },
+                {
+                    $group: {
+                        _id: "$parentTask",
+                        subtaskCount: { $sum: 1 },
+                        subtaskDone: { $sum: { $cond: [{ $eq: ["$status", "done"] }, 1, 0] } },
+                    },
                 },
-            },
-        ]);
+            ])
+            : [];
 
         const statsMap = {};
         subtaskStats.forEach((stat) => {
@@ -243,6 +281,13 @@ const updateTask = async (req, res, next) => {
         }
 
         await task.save();
+
+        // Auto-add new assignees to the project's members list so they can see the project
+        if (assignees !== undefined && assignees.length > 0) {
+            await Project.findByIdAndUpdate(task.project, {
+                $addToSet: { members: { $each: assignees } },
+            });
+        }
 
         await task.populate("assignees", "fullName email department");
         await task.populate("createdBy", "fullName email");
