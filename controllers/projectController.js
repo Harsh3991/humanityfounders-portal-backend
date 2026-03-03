@@ -18,6 +18,17 @@ const createProject = async (req, res, next) => {
             createdBy: req.user._id,
         });
 
+        // Add project initialization task
+        const initialTask = await Task.create({
+            name: "Project Initialization",
+            description: "Set up the initial requirements and structure for the project.",
+            project: project._id,
+            assignees: [req.user._id],
+            createdBy: req.user._id,
+            status: "in-progress",
+            priority: "medium",
+        });
+
         // Populate members for response
         await project.populate("members", "fullName email department role");
         await project.populate("createdBy", "fullName email");
@@ -275,7 +286,8 @@ const removeMember = async (req, res, next) => {
 
 // ─────────────────────────────────────────────────
 // DELETE /api/projects/:id
-// Delete a project and all its tasks (Admin only)
+// Delete a project and all its tasks
+// Admin can delete any project; creator can delete their own
 // ─────────────────────────────────────────────────
 const deleteProject = async (req, res, next) => {
     try {
@@ -285,6 +297,17 @@ const deleteProject = async (req, res, next) => {
             return res.status(404).json({
                 success: false,
                 message: "Project not found",
+            });
+        }
+
+        // Only admin OR the creator can delete the project
+        const isAdmin = req.user.role === ROLES.ADMIN;
+        const isCreator = project.createdBy.toString() === req.user._id.toString();
+
+        if (!isAdmin && !isCreator) {
+            return res.status(403).json({
+                success: false,
+                message: "Access denied. Only the project creator or an admin can delete this project.",
             });
         }
 
