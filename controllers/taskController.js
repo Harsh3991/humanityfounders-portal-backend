@@ -310,7 +310,7 @@ const updateTask = async (req, res, next) => {
 // ─────────────────────────────────────────────────
 const getMyTasks = async (req, res, next) => {
     try {
-        const filter = { assignees: req.user._id, parentTask: null };
+        const filter = { assignees: req.user._id };
 
         // Optional status filter
         if (req.query.status) filter.status = req.query.status;
@@ -340,7 +340,7 @@ const getTasksByUser = async (req, res, next) => {
     try {
         const { userId } = req.params;
 
-        const tasks = await Task.find({ assignees: userId, parentTask: null })
+        const tasks = await Task.find({ assignees: userId })
             .populate("project", "name status")
             .sort({ dueDate: 1 })
             .lean();

@@ -574,18 +574,29 @@ const adminOverride = async (req, res, next) => {
                 dailyReport: "Admin overridden."
             });
         } else {
+            // Check if there are genuine user logs in this record
+            const hasRealLogs = (record.clockIn != null || (record.sessions && record.sessions.length > 0)) &&
+                (!record.dailyReport || !record.dailyReport.startsWith("Admin "));
+
             record.status = status === 'present' ? 'clocked-out' : 'absent';
-            record.activeSeconds = activeSeconds;
-            if (status === 'absent') {
-                record.lastActiveAt = null;
-                record.clockIn = null;
-                record.clockOut = null;
-                record.dailyReport = "Admin marked absent.";
-            } else {
-                if (!record.clockIn) record.clockIn = start;
-                record.clockOut = new Date(start.getTime() + activeSeconds * 1000);
-                record.dailyReport = "Admin overridden.";
+            record.lastActiveAt = null; // stop any active timer if it was running
+
+            if (!hasRealLogs) {
+                // No genuine logs exist, safe to overwrite with Admin defaults
+                if (status === 'absent') {
+                    record.activeSeconds = 0;
+                    record.clockIn = null;
+                    record.clockOut = null;
+                    record.dailyReport = "Admin marked absent.";
+                } else {
+                    record.activeSeconds = activeSeconds;
+                    record.clockIn = start;
+                    record.clockOut = new Date(start.getTime() + activeSeconds * 1000);
+                    record.dailyReport = "Admin overridden.";
+                }
             }
+            // else: We have real logs! We do NOT overwrite activeSeconds, clockIn, clockOut, or dailyReport.
+            // Their real data is perfectly preserved!
         }
 
         await record.save();
