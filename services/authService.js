@@ -88,13 +88,17 @@ const registerUser = async (creatorUser, userData) => {
         throw error;
     }
 
+    // Auto-assign Management department for admin and hr roles
+    const finalDepartment =
+        role === ROLES.ADMIN || role === ROLES.HR ? "Management" : department;
+
     // Create user with status "pending" (needs onboarding)
     const newUser = await User.create({
         fullName,
         email,
         password,
         role,
-        department,
+        department: finalDepartment,
         status: USER_STATUS.PENDING,
         createdBy: creatorUser._id,
     });

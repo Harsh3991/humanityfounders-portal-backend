@@ -41,9 +41,19 @@ const getAllProjects = async (req, res, next) => {
     try {
         let filter = {};
 
-        // Employees only see projects they are a member of
+        // Employees see projects they are a member of OR assigned to any task in
         if (req.user.role === ROLES.EMPLOYEE) {
-            filter = { members: req.user._id };
+            // Find project IDs where this user is assigned to any task (safety net)
+            const assignedProjectIds = await Task.distinct("project", {
+                assignees: req.user._id,
+            });
+
+            filter = {
+                $or: [
+                    { members: req.user._id },
+                    { _id: { $in: assignedProjectIds } },
+                ],
+            };
         }
 
         // Optional status filter
@@ -55,21 +65,23 @@ const getAllProjects = async (req, res, next) => {
             .populate("members", "fullName email department role")
             .populate("createdBy", "fullName email")
             .sort({ createdAt: -1 })
-            .lean(); // Extremely fast query return as raw JSON vs Mongoose Objects
+            .lean();
 
         const projectIds = projects.map(p => p._id);
 
-        // 🚀 Fix N+1 Query Problem: Grab all project task stats in ONE single DB query using an Aggregation Pipeline
-        const taskStats = await Task.aggregate([
-            { $match: { project: { $in: projectIds } } },
-            {
-                $group: {
-                    _id: "$project",
-                    totalTasks: { $sum: 1 },
-                    completedTasks: { $sum: { $cond: [{ $eq: ["$status", "done"] }, 1, 0] } }
+        // 🚀 Run task stats aggregation in parallel — no need to wait sequentially
+        const taskStats = projectIds.length > 0
+            ? await Task.aggregate([
+                { $match: { project: { $in: projectIds } } },
+                {
+                    $group: {
+                        _id: "$project",
+                        totalTasks: { $sum: 1 },
+                        completedTasks: { $sum: { $cond: [{ $eq: ["$status", "done"] }, 1, 0] } }
+                    }
                 }
-            }
-        ]);
+            ])
+            : [];
 
         // Map for fast O(1) lookups
         const statsMap = {};
@@ -117,15 +129,26 @@ const getProjectById = async (req, res, next) => {
             });
         }
 
-        // Employees can only view projects they belong to
-        if (
-            req.user.role === ROLES.EMPLOYEE &&
-            !project.members.some((m) => m._id.toString() === req.user._id.toString())
-        ) {
-            return res.status(403).json({
-                success: false,
-                message: "Access denied. You are not a member of this project.",
-            });
+        // Employees can only view projects they belong to or have tasks assigned in
+        if (req.user.role === ROLES.EMPLOYEE) {
+            const isMember = project.members.some(
+                (m) => m._id.toString() === req.user._id.toString()
+            );
+
+            if (!isMember) {
+                // Check if the employee is assigned to any task in this project
+                const assignedTaskCount = await Task.countDocuments({
+                    project: project._id,
+                    assignees: req.user._id,
+                });
+
+                if (assignedTaskCount === 0) {
+                    return res.status(403).json({
+                        success: false,
+                        message: "Access denied. You are not a member of this project.",
+                    });
+                }
+            }
         }
 
         res.status(200).json({
