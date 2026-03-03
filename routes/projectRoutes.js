@@ -17,10 +17,9 @@ router.use(protect);
 
 // ─── Project CRUD ───
 router.get("/", getAllProjects);                              // All users (filtered by role)
-router.get("/:id", getProjectById);                          // All users (access checked in controller)
-router.post("/", roleAuth("admin"), createProject);          // Admin only
+router.post("/", roleAuth("admin", "manager", "employee"), createProject); // Admin, Manager, Employee
 router.put("/:id", roleAuth("admin"), updateProject);        // Admin only
-router.delete("/:id", roleAuth("admin"), deleteProject);     // Admin only
+router.delete("/:id", deleteProject);                        // Admin or project creator
 
 // ─── Member Management ───
 router.put("/:id/members", roleAuth("admin"), addMembers);         // Admin only
