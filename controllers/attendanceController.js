@@ -424,6 +424,67 @@ const getHistory = async (req, res, next) => {
 };
 
 // ═══════════════════════════════════════════════
+// GET /api/attendance/day/:date
+// Get a single day's attendance record for the logged-in user (fresh from DB)
+// date format: YYYY-MM-DD
+// ═══════════════════════════════════════════════
+const getDayRecord = async (req, res, next) => {
+    try {
+        const dateStr = req.params.date; // e.g. "2026-03-05"
+        const [yyyy, mm, dd] = dateStr.split('-');
+        const dayStart = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+        const dayEnd = new Date(Number(yyyy), Number(mm) - 1, Number(dd), 23, 59, 59, 999);
+
+        const record = await Attendance.findOne({
+            user: req.user._id,
+            date: { $gte: dayStart, $lte: dayEnd },
+        })
+            .select("date status clockIn clockOut activeSeconds dailyReport sessions")
+            .lean();
+
+        res.status(200).json({
+            success: true,
+            data: record || null,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// ═══════════════════════════════════════════════
+// GET /api/attendance/admin/:userId/day/:date
+// Get a single day's attendance record for a specific user (Admin/HR)
+// date format: YYYY-MM-DD
+// ═══════════════════════════════════════════════
+const getAdminDayRecord = async (req, res, next) => {
+    try {
+        const { userId, date: dateStr } = req.params;
+        const [yyyy, mm, dd] = dateStr.split('-');
+        const dayStart = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+        const dayEnd = new Date(Number(yyyy), Number(mm) - 1, Number(dd), 23, 59, 59, 999);
+
+        const user = await User.findById(userId).select("fullName email");
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        const record = await Attendance.findOne({
+            user: userId,
+            date: { $gte: dayStart, $lte: dayEnd },
+        })
+            .select("date status clockIn clockOut activeSeconds dailyReport sessions")
+            .lean();
+
+        res.status(200).json({
+            success: true,
+            data: record || null,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// ═══════════════════════════════════════════════
 // GET /api/attendance/admin/status
 // Get current status of all users (for Admin Dashboard/Directory)
 // ═══════════════════════════════════════════════
@@ -664,6 +725,8 @@ module.exports = {
     clockOut,
     getToday,
     getHistory,
+    getDayRecord,
+    getAdminDayRecord,
     getAllUsersStatus,
     getUserAttendanceHistory,
     adminOverride,

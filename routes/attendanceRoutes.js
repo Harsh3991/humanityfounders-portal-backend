@@ -7,6 +7,8 @@ const {
     clockOut,
     getToday,
     getHistory,
+    getDayRecord,
+    getAdminDayRecord,
     getAllUsersStatus,
     getUserAttendanceHistory,
     adminOverride,
@@ -25,6 +27,9 @@ router.get("/admin/status", roleAuth("admin", "hr", "manager"), getAllUsersStatu
 // Get specific user history
 router.get("/admin/:userId/history", roleAuth("admin", "hr", "manager"), getUserAttendanceHistory);
 
+// Get single day record for a specific user
+router.get("/admin/:userId/day/:date", roleAuth("admin", "hr", "manager"), getAdminDayRecord);
+
 // Override an attendance day
 router.post("/admin/:userId/override", roleAuth("admin", "hr", "manager"), adminOverride);
 
@@ -37,6 +42,9 @@ router.get("/today", getToday);
 
 // Monthly history
 router.get("/history", getHistory);
+
+// Single day record (always fresh from DB)
+router.get("/day/:date", getDayRecord);
 
 // Clock actions
 router.post("/clock-in", clockIn);
