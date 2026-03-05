@@ -4,24 +4,20 @@ const Task = require("../models/Task");
 const Project = require("../models/Project");
 const { ROLES, USER_STATUS } = require("../utils/constants");
 
+const { getTodayRangeIST, getMonthRangeIST } = require("../utils/dateUtils");
+
 /**
  * Get the start and end of the current month
  */
 const getMonthRange = () => {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-    return { start, end };
+    return getMonthRangeIST();
 };
 
 /**
  * Get today's date range (start of day to end of day)
  */
 const getTodayRange = () => {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-    return { start, end };
+    return getTodayRangeIST();
 };
 
 /**

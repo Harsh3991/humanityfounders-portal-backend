@@ -2,29 +2,13 @@ const Attendance = require("../models/Attendance");
 const User = require("../models/User");
 const googleSheetsService = require("../services/googleSheetsService");
 
+const { getTodayRangeIST, getMonthRangeIST } = require("../utils/dateUtils");
+
 /**
  * Helper: get today's date range in IST (Asia/Kolkata)
- * Works correctly regardless of server timezone (UTC on Heroku, IST locally, etc.)
  */
 const getTodayRange = () => {
-    const now = new Date();
-    // Extract date components in IST
-    const formatter = new Intl.DateTimeFormat('en-IN', {
-        timeZone: 'Asia/Kolkata',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-    });
-    const parts = formatter.formatToParts(now);
-    const get = (type) => parseInt(parts.find(p => p.type === type)?.value || '0');
-    const y = get('year');
-    const m = get('month') - 1; // JS months are 0-indexed
-    const d = get('day');
-
-    // Create boundaries using local constructor so MongoDB queries match
-    const start = new Date(y, m, d);
-    const end = new Date(y, m, d, 23, 59, 59, 999);
-    return { start, end };
+    return getTodayRangeIST();
 };
 
 /**
@@ -380,12 +364,10 @@ const getToday = async (req, res, next) => {
 // ═══════════════════════════════════════════════
 const getHistory = async (req, res, next) => {
     try {
-        const now = new Date();
-        const month = parseInt(req.query.month) || now.getMonth() + 1; // 1-12
-        const year = parseInt(req.query.year) || now.getFullYear();
+        const month = parseInt(req.query.month); // 1-12
+        const year = parseInt(req.query.year);
 
-        const start = new Date(year, month - 1, 1);
-        const end = new Date(year, month, 0, 23, 59, 59, 999);
+        const { start, end } = getMonthRangeIST(month, year);
 
         const records = await Attendance.find({
             user: req.user._id,
@@ -432,8 +414,8 @@ const getDayRecord = async (req, res, next) => {
     try {
         const dateStr = req.params.date; // e.g. "2026-03-05"
         const [yyyy, mm, dd] = dateStr.split('-');
-        const dayStart = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
-        const dayEnd = new Date(Number(yyyy), Number(mm) - 1, Number(dd), 23, 59, 59, 999);
+        const targetDate = new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), 12, 0, 0)); // Midday UTC to ensure it falls in the right day
+        const { start: dayStart, end: dayEnd } = getTodayRangeIST(targetDate);
 
         const record = await Attendance.findOne({
             user: req.user._id,
@@ -460,8 +442,8 @@ const getAdminDayRecord = async (req, res, next) => {
     try {
         const { userId, date: dateStr } = req.params;
         const [yyyy, mm, dd] = dateStr.split('-');
-        const dayStart = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
-        const dayEnd = new Date(Number(yyyy), Number(mm) - 1, Number(dd), 23, 59, 59, 999);
+        const targetDate = new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), 12, 0, 0));
+        const { start: dayStart, end: dayEnd } = getTodayRangeIST(targetDate);
 
         const user = await User.findById(userId).select("fullName email");
         if (!user) {
@@ -552,12 +534,7 @@ const getAllUsersStatus = async (req, res, next) => {
 const getUserAttendanceHistory = async (req, res, next) => {
     try {
         const { userId } = req.params;
-        const now = new Date();
-        const month = parseInt(req.query.month) || now.getMonth() + 1;
-        const year = parseInt(req.query.year) || now.getFullYear();
-
-        const start = new Date(year, month - 1, 1);
-        const end = new Date(year, month, 0, 23, 59, 59, 999);
+        const { start, end } = getMonthRangeIST(parseInt(req.query.month), parseInt(req.query.year));
 
         // Verify user exists
         const user = await User.findById(userId).select("fullName email");
@@ -614,7 +591,8 @@ const adminOverride = async (req, res, next) => {
         const { date, status } = req.body; // status = 'present' or 'absent', date = YYYY-MM-DD
 
         const [yyyy, mm, dd] = date.split('-');
-        const start = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+        const targetDate = new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), 12, 0, 0));
+        const { start } = getTodayRangeIST(targetDate);
 
         let record = await Attendance.findOne({ user: userId, date: start });
 
@@ -677,12 +655,7 @@ const adminOverride = async (req, res, next) => {
 // ═══════════════════════════════════════════════
 const syncGoogleSheet = async (req, res, next) => {
     try {
-        const now = new Date();
-        const month = parseInt(req.body.month) || now.getMonth() + 1;
-        const year = parseInt(req.body.year) || now.getFullYear();
-
-        const start = new Date(year, month - 1, 1);
-        const end = new Date(year, month, 0, 23, 59, 59, 999);
+        const { start, end } = getMonthRangeIST(parseInt(req.body.month), parseInt(req.body.year));
 
         // Fetch user data populated
         const records = await Attendance.find({
