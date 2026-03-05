@@ -15,8 +15,8 @@ const roleAuth = require("../middleware/roleAuth");
 // All routes here require authentication
 router.use(protect);
 
-// ─── Directory (HR & Admin) ───
-router.get("/", roleAuth("admin", "hr"), getAllEmployees);
+// ─── Directory (HR & Admin & Employee for assignments) ───
+router.get("/", roleAuth("admin", "hr", "employee"), getAllEmployees);
 router.get("/:id", roleAuth("admin", "hr"), getEmployeeById);
 router.get("/:id/worklog", roleAuth("admin", "hr"), getEmployeeWorklog);
 router.get("/:id/document/:docType", roleAuth("admin", "hr"), getEmployeeDocument);
