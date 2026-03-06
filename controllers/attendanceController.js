@@ -534,7 +534,9 @@ const getAllUsersStatus = async (req, res, next) => {
 const getUserAttendanceHistory = async (req, res, next) => {
     try {
         const { userId } = req.params;
-        const { start, end } = getMonthRangeIST(parseInt(req.query.month), parseInt(req.query.year));
+        const month = parseInt(req.query.month);
+        const year = parseInt(req.query.year);
+        const { start, end } = getMonthRangeIST(month, year);
 
         // Verify user exists
         const user = await User.findById(userId).select("fullName email");
