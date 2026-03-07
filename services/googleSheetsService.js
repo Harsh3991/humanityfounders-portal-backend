@@ -5,28 +5,17 @@ const fs = require("fs");
 
 /**
  * Initialize Google Sheets API Client
- * 
- * Supports two modes:
- * 1. (Primary)  GOOGLE_SERVICE_ACCOUNT_EMAIL + GOOGLE_PRIVATE_KEY env vars
- * 2. (Fallback) GOOGLE_APPLICATION_CREDENTIALS env var pointing to JSON key file
  */
 const getAuthClient = () => {
     try {
-        // Mode 1: Use individual env vars (works on Heroku, local, everywhere)
         if (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
-            // Handle private key newlines: dotenv with single quotes keeps literal \n,
-            // Heroku also keeps literal \n — this replace converts them to real newlines.
-            // If already real newlines (dotenv double quotes), the replace is a no-op.
             const privateKey = process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n");
-
             return new JWT({
                 email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
                 key: privateKey,
                 scopes: ["https://www.googleapis.com/auth/spreadsheets"],
             });
         }
-
-        // Mode 2: Fallback to JSON key file
         const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
         if (credentialsPath) {
             const resolvedPath = path.resolve(credentialsPath);
@@ -37,39 +26,21 @@ const getAuthClient = () => {
                     key: keyFile.private_key,
                     scopes: ["https://www.googleapis.com/auth/spreadsheets"],
                 });
-            } else {
-                console.error("GOOGLE_APPLICATION_CREDENTIALS file not found at:", resolvedPath);
             }
         }
-
-        console.error("Missing Google Service Account credentials. Set GOOGLE_SERVICE_ACCOUNT_EMAIL + GOOGLE_PRIVATE_KEY env vars.");
         return null;
     } catch (error) {
-        console.error("Error creating Google Auth Client:", error);
         return null;
     }
 };
 
-/**
- * Get the Google Sheets API instance
- */
 const getSheetsInstance = () => {
     const authClient = getAuthClient();
     const spreadsheetId = process.env.GOOGLE_SHEET_ID;
-
-    if (!authClient || !spreadsheetId) {
-        return null;
-    }
-
-    return {
-        sheets: google.sheets({ version: "v4", auth: authClient }),
-        spreadsheetId,
-    };
+    if (!authClient || !spreadsheetId) return null;
+    return { sheets: google.sheets({ version: "v4", auth: authClient }), spreadsheetId };
 };
 
-/**
- * Format seconds into HH:MM:SS
- */
 const formatHHMMSS = (totalSeconds) => {
     const hrs = Math.floor(totalSeconds / 3600);
     const mins = Math.floor((totalSeconds % 3600) / 60);
@@ -77,250 +48,276 @@ const formatHHMMSS = (totalSeconds) => {
     return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 };
 
-/**
- * Helper: get date/time components in IST (Asia/Kolkata) regardless of server timezone.
- * Returns { year, month (1-12), day, hours (0-23), minutes, seconds }
- */
 const getISTComponents = (dateObj) => {
     const d = new Date(dateObj);
-    // Use Intl to extract individual parts in IST
     const formatter = new Intl.DateTimeFormat('en-IN', {
-        timeZone: 'Asia/Kolkata',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
+        timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
     });
-    const parts = formatter.formatToParts(d);
-    const get = (type) => parts.find(p => p.type === type)?.value || '00';
+    const parts = FormatterToMap(formatter.formatToParts(d));
     return {
-        year: parseInt(get('year')),
-        month: parseInt(get('month')),
-        day: parseInt(get('day')),
-        hours: parseInt(get('hour')),
-        minutes: parseInt(get('minute')),
-        seconds: parseInt(get('second')),
+        year: parseInt(parts['year']), month: parseInt(parts['month']),
+        day: parseInt(parts['day']), hours: parseInt(parts['hour']),
+        minutes: parseInt(parts['minute']), seconds: parseInt(parts['second']),
     };
 };
+function FormatterToMap(parts) {
+    let map = {};
+    for (const part of parts) map[part.type] = part.value || '00';
+    return map;
+}
 
-/**
- * Format a Date into HH:MM:SS (24hr) in IST. If the date is on a different calendar day
- * than recordDate (in IST), append "(DD-MM-YYYY)" to flag cross-day.
- */
-const formatTimeWithCrossDay = (dateObj, recordDate) => {
-    if (!dateObj) return "-";
+const getColumnLetter = (colIndex) => {
+    let letter = "";
+    while (colIndex >= 0) {
+        letter = String.fromCharCode((colIndex % 26) + 65) + letter;
+        colIndex = Math.floor(colIndex / 26) - 1;
+    }
+    return letter;
+};
+
+const ensureMonthSheet = async (sheets, spreadsheetId, dateObj) => {
     const c = getISTComponents(dateObj);
-    const timeStr = `${String(c.hours).padStart(2, '0')}:${String(c.minutes).padStart(2, '0')}:${String(c.seconds).padStart(2, '0')}`;
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const sheetTitle = `${monthNames[c.month - 1]} ${c.year}`;
 
-    // Check if this timestamp is on a different calendar day than the record's date (in IST)
-    if (recordDate) {
-        const rc = getISTComponents(recordDate);
-        if (
-            c.year !== rc.year ||
-            c.month !== rc.month ||
-            c.day !== rc.day
-        ) {
-            const dayStr = `${String(c.day).padStart(2, '0')}-${String(c.month).padStart(2, '0')}-${c.year}`;
-            return `${timeStr} (${dayStr})`;
-        }
-    }
-    return timeStr;
-};
+    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
+    const sheet = spreadsheet.data.sheets.find(s => s.properties.title === sheetTitle);
 
-/**
- * Format the date as DD-MM-YYYY in IST
- */
-const formatDateDDMMYYYY = (dateObj) => {
-    if (!dateObj) return "";
-    const c = getISTComponents(dateObj);
-    return `${String(c.day).padStart(2, '0')}-${String(c.month).padStart(2, '0')}-${c.year}`;
-};
+    if (sheet) return sheetTitle;
 
-/**
- * Build the full row data for a given attendance record.
- *
- * Columns:
- *   A: Employee Name
- *   B: Date (DD-MM-YYYY)
- *   C: Status
- *   D: Working Hours (HH:MM:SS)
- *   E+: Dynamic session columns — 1st Clock In, 1st Clock Out, 1st Report, 2nd Clock In, 2nd Clock Out, 2nd Report, ...
- *        plus any currently active (not yet closed) session
- */
-const buildSheetRow = (userName, record) => {
-    const dateStr = formatDateDDMMYYYY(record.date);
-    const status = record.status || "absent";
-    const workedSeconds = record.activeSeconds || 0;
-    const hoursStr = formatHHMMSS(workedSeconds);
+    // Create sheet
+    await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        resource: { requests: [{ addSheet: { properties: { title: sheetTitle } } }] }
+    });
 
-    const row = [userName, dateStr, status, hoursStr];
-
-    // Split the dailyReport into individual reports (one per clock-out)
-    // Format: "[time]: report text" separated by newlines
-    const reports = (record.dailyReport || "")
-        .split("\n")
-        .filter(r => r.trim() !== "")
-        .map(r => r.replace(/^\[.*?\]:\s*/, ""));  // Strip "[time]: " prefix
-
-    // Add completed sessions from the sessions array
-    const sessions = record.sessions || [];
-    for (let i = 0; i < sessions.length; i++) {
-        row.push(formatTimeWithCrossDay(sessions[i].start, record.date));
-        row.push(formatTimeWithCrossDay(sessions[i].end, record.date));
-        // Add the report for this session (if it exists)
-        row.push(reports[i] || "");
+    const daysInMonth = new Date(c.year, c.month, 0).getDate();
+    const headerRow = ["Employee Name", "Department"];
+    for (let day = 1; day <= daysInMonth; day++) {
+        headerRow.push(`${String(day).padStart(2, '0')}/${String(c.month).padStart(2, '0')}/${String(c.year).slice(-2)}`);
     }
 
-    // If currently clocked-in (active session not yet in sessions array),
-    // add the current clock-in time without a clock-out yet
-    if (record.status === "clocked-in" && record.lastActiveAt) {
-        row.push(formatTimeWithCrossDay(record.lastActiveAt, record.date));
-        // No clock-out or report yet for this active session
-    }
+    await sheets.spreadsheets.values.update({
+        spreadsheetId, range: `'${sheetTitle}'!A1`,
+        valueInputOption: "USER_ENTERED",
+        resource: { values: [headerRow] },
+    });
 
-    return row;
-};
-
-/**
- * Build the header row. Fixed columns + dynamic session columns.
- * Each session has 3 columns: Clock In, Clock Out, Report
- */
-const buildHeaderRow = (sessionCount) => {
-    const header = ["Employee Name", "Date", "Status", "Working Hours"];
-    for (let i = 1; i <= sessionCount; i++) {
-        const label = getOrdinal(i);
-        header.push(`${label} Clock In`);
-        header.push(`${label} Clock Out`);
-        header.push(`${label} Report`);
-    }
-    return header;
-};
-
-/**
- * Get ordinal label: 1 -> "1st", 2 -> "2nd", 3 -> "3rd", etc.
- */
-const getOrdinal = (n) => {
-    const s = ["th", "st", "nd", "rd"];
-    const v = n % 100;
-    return n + (s[(v - 20) % 10] || s[v] || s[0]);
-};
-
-/**
- * Ensure that row 1 of the sheet has proper headers.
- * If the current data row has more sessions than existing headers,
- * expand the headers.
- */
-const ensureHeaders = async (sheets, spreadsheetId, dataRowLength) => {
-    try {
-        // Read row 1
-        const headerResponse = await sheets.spreadsheets.values.get({
+    // Formatting: Highlight header row, blue background, white text for professional look
+    const newSheetData = await sheets.spreadsheets.get({ spreadsheetId });
+    const createdSheet = newSheetData.data.sheets.find(s => s.properties.title === sheetTitle);
+    if (createdSheet) {
+        const sheetId = createdSheet.properties.sheetId;
+        await sheets.spreadsheets.batchUpdate({
             spreadsheetId,
-            range: "Sheet1!1:1",
+            resource: {
+                requests: [
+                    {
+                        repeatCell: {
+                            range: { sheetId: sheetId, startRowIndex: 0, endRowIndex: 1 },
+                            cell: {
+                                userEnteredFormat: {
+                                    backgroundColor: { red: 0.92, green: 0.96, blue: 1.0 }, // Light cyan-blue
+                                    textFormat: { foregroundColor: { red: 0.2, green: 0.3, blue: 0.4 }, bold: true }, // Dark slate
+                                    horizontalAlignment: "CENTER",
+                                    verticalAlignment: "MIDDLE"
+                                }
+                            },
+                            fields: "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)"
+                        }
+                    },
+                    {
+                        repeatCell: {
+                            range: { sheetId: sheetId, startRowIndex: 1 },
+                            cell: {
+                                userEnteredFormat: {
+                                    wrapStrategy: "CLIP",
+                                    verticalAlignment: "MIDDLE"
+                                }
+                            },
+                            fields: "userEnteredFormat(wrapStrategy,verticalAlignment)"
+                        }
+                    },
+                    {
+                        updateSheetProperties: {
+                            properties: {
+                                sheetId: sheetId,
+                                gridProperties: {
+                                    frozenRowCount: 1,
+                                    frozenColumnCount: 2
+                                }
+                            },
+                            fields: "gridProperties(frozenRowCount,frozenColumnCount)"
+                        }
+                    },
+                    {
+                        updateDimensionProperties: {
+                            range: { sheetId: sheetId, dimension: "COLUMNS", startIndex: 2 },
+                            properties: { pixelSize: 150 },
+                            fields: "pixelSize"
+                        }
+                    }
+                ]
+            }
         });
-
-        const existingHeader = (headerResponse.data.values && headerResponse.data.values[0]) || [];
-
-        // Calculate how many session groups the data row has
-        // Data row: [Name, Date, Status, Hours, ...sessions]
-        // Each session group = 3 columns (Clock In + Clock Out + Report)
-        const sessionColumns = dataRowLength - 4; // subtract fixed columns
-        const sessionCount = Math.ceil(sessionColumns / 3);
-
-        // Check if existing header covers enough columns
-        const neededColumns = 4 + (sessionCount * 3);
-
-        if (existingHeader.length < neededColumns || existingHeader[0] !== "Employee Name") {
-            // Build and write the header
-            const header = buildHeaderRow(sessionCount);
-            await sheets.spreadsheets.values.update({
-                spreadsheetId,
-                range: `Sheet1!A1`,
-                valueInputOption: "USER_ENTERED",
-                resource: { values: [header] },
-            });
-        }
-    } catch (error) {
-        console.error("Error ensuring headers:", error.message);
-        // Non-critical, don't throw
     }
+
+    return sheetTitle;
 };
 
 /**
- * Sync (upsert) a single attendance record row to Google Sheet.
- * - Ensures row 1 has proper headers
- * - Finds existing row by Employee Name (col A) + Date (col B)
- * - If found: clears that row and writes the new data
- * - If not found: appends a new row
+ * user: { fullName: "...", department: "..." }
+ * record: { date: Date, status: "...", dailyReport: "...", activeSeconds: 0 }
  */
-const syncRecordToSheet = async (userName, record) => {
+const syncRecordToSheet = async (user, record) => {
     const instance = getSheetsInstance();
-    if (!instance) {
-        console.error("Google Sheets not configured, skipping sync.");
-        return;
-    }
+    if (!instance) return;
 
     const { sheets, spreadsheetId } = instance;
-    const newRow = buildSheetRow(userName, record);
-    const dateStr = newRow[1]; // DD-MM-YYYY
+    const dateObj = new Date(record.date || record.clockIn || Date.now());
+    const sheetTitle = await ensureMonthSheet(sheets, spreadsheetId, dateObj);
+    const c = getISTComponents(dateObj);
+    const dayIndex = c.day; // 1-indexed
 
-    try {
-        // Ensure headers exist and are wide enough
-        await ensureHeaders(sheets, spreadsheetId, newRow.length);
+    const readResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: `'${sheetTitle}'!A:B`,
+    });
 
-        // Read existing data to find matching row (skip row 1 = header)
-        const readResponse = await sheets.spreadsheets.values.get({
+    const values = readResponse.data.values || [];
+    let rowIndex = -1;
+    for (let i = 0; i < values.length; i++) {
+        if (values[i][0] === user.fullName) {
+            rowIndex = i; // 0-indexed
+            break;
+        }
+    }
+
+    if (rowIndex === -1) { // Append new employee block
+        const newRows = [
+            [user.fullName, user.department || "Employee"],
+            ["Daily Update", ""],
+            ["Total Time Worked", ""]
+        ];
+
+        await sheets.spreadsheets.values.append({
             spreadsheetId,
-            range: "Sheet1!A:B",
+            range: `'${sheetTitle}'!A:A`,
+            valueInputOption: "USER_ENTERED",
+            insertDataOption: "INSERT_ROWS",
+            resource: { values: newRows }
         });
 
-        const existingRows = readResponse.data.values || [];
-
-        // Find the row index for this user + date combo (skip row 0 which is header)
-        let rowIndex = -1;
-        for (let i = existingRows.length - 1; i >= 1; i--) {
-            if (existingRows[i][0] === userName && existingRows[i][1] === dateStr) {
-                rowIndex = i + 1; // Google Sheets is 1-indexed
+        const newReadResponse = await sheets.spreadsheets.values.get({
+            spreadsheetId, range: `'${sheetTitle}'!A:B`
+        });
+        const newValues = newReadResponse.data.values || [];
+        for (let i = 0; i < newValues.length; i++) {
+            if (newValues[i][0] === user.fullName) {
+                rowIndex = i;
                 break;
             }
         }
 
         if (rowIndex !== -1) {
-            // CLEAR the old row first (to handle dynamic width shrinking)
-            await sheets.spreadsheets.values.clear({
-                spreadsheetId,
-                range: `Sheet1!A${rowIndex}:Z${rowIndex}`,
-            });
+            const spreadsheetData = await sheets.spreadsheets.get({ spreadsheetId });
+            const s = spreadsheetData.data.sheets.find(sh => sh.properties.title === sheetTitle);
+            if (s) {
+                const sheetId = s.properties.sheetId;
+                const requests = [];
+                // Row 1 (Index rowIndex): Light Green -> RGB 217, 234, 211
+                requests.push({
+                    repeatCell: {
+                        range: { sheetId, startRowIndex: rowIndex, endRowIndex: rowIndex + 1 },
+                        cell: { userEnteredFormat: { backgroundColor: { red: 217 / 255, green: 234 / 255, blue: 211 / 255 }, wrapStrategy: "CLIP", verticalAlignment: "TOP" } },
+                        fields: "userEnteredFormat(backgroundColor,wrapStrategy,verticalAlignment)"
+                    }
+                });
+                // Row 2 (Index rowIndex + 1): Light Blue -> RGB 207, 226, 243
+                requests.push({
+                    repeatCell: {
+                        range: { sheetId, startRowIndex: rowIndex + 1, endRowIndex: rowIndex + 2 },
+                        cell: { userEnteredFormat: { backgroundColor: { red: 207 / 255, green: 226 / 255, blue: 243 / 255 }, wrapStrategy: "CLIP", verticalAlignment: "TOP" } },
+                        fields: "userEnteredFormat(backgroundColor,wrapStrategy,verticalAlignment)"
+                    }
+                });
+                // Row 3 (Index rowIndex + 2): Light Pink -> RGB 244, 204, 204
+                requests.push({
+                    repeatCell: {
+                        range: { sheetId, startRowIndex: rowIndex + 2, endRowIndex: rowIndex + 3 },
+                        cell: { userEnteredFormat: { backgroundColor: { red: 244 / 255, green: 204 / 255, blue: 204 / 255 }, wrapStrategy: "CLIP", verticalAlignment: "TOP" } },
+                        fields: "userEnteredFormat(backgroundColor,wrapStrategy,verticalAlignment)"
+                    }
+                });
+                // Force fixed row heights so newlines don't cause massive vertical stretching
+                requests.push({
+                    updateDimensionProperties: {
+                        range: { sheetId, dimension: "ROWS", startIndex: rowIndex, endIndex: rowIndex + 3 },
+                        properties: { pixelSize: 30 },
+                        fields: "pixelSize"
+                    }
+                });
+                // All Borders for the 3 rows
+                requests.push({
+                    updateBorders: {
+                        range: { sheetId, startRowIndex: rowIndex, endRowIndex: rowIndex + 3 },
+                        top: { style: "SOLID", color: { red: 0.8, green: 0.8, blue: 0.8 } },
+                        bottom: { style: "SOLID", color: { red: 0.8, green: 0.8, blue: 0.8 } },
+                        left: { style: "SOLID", color: { red: 0.8, green: 0.8, blue: 0.8 } },
+                        right: { style: "SOLID", color: { red: 0.8, green: 0.8, blue: 0.8 } },
+                        innerHorizontal: { style: "SOLID", color: { red: 0.8, green: 0.8, blue: 0.8 } },
+                        innerVertical: { style: "SOLID", color: { red: 0.8, green: 0.8, blue: 0.8 } }
+                    }
+                });
 
-            // UPDATE with new data
-            await sheets.spreadsheets.values.update({
-                spreadsheetId,
-                range: `Sheet1!A${rowIndex}`,
-                valueInputOption: "RAW",
-                resource: { values: [newRow] },
-            });
-        } else {
-            // APPEND new row
-            await sheets.spreadsheets.values.append({
-                spreadsheetId,
-                range: "Sheet1!A:A",
-                valueInputOption: "RAW",
-                insertDataOption: "INSERT_ROWS",
-                resource: { values: [newRow] },
-            });
+                await sheets.spreadsheets.batchUpdate({ spreadsheetId, resource: { requests } });
+            }
         }
-
-        return { success: true };
-    } catch (error) {
-        console.error("Error syncing to Google Sheet:", error.message);
-        throw error;
     }
+
+    if (rowIndex === -1) return; // safety check
+
+    // Check attendance status
+    const isPresent = ["clocked-in", "clocked-out", "away"].includes(record.status);
+    const isAbsent = record.status === "absent";
+    let attendanceStatus = record.status;
+    if (isPresent) attendanceStatus = "Present";
+    else if (isAbsent) attendanceStatus = "Absent";
+
+    const colLetter = getColumnLetter(1 + dayIndex); // Column A=0, B=1, C=2=01/03. Day 1 -> C (2)
+
+    // Ensure we don't accidentally update outside month range
+    const daysInMonth = new Date(c.year, c.month, 0).getDate();
+    if (dayIndex > daysInMonth) return;
+
+    // Remove empty daily report string
+    let dReport = record.dailyReport || "";
+    let workedStr = formatHHMMSS(record.activeSeconds || 0);
+
+    // Update Attendance Status
+    await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `'${sheetTitle}'!${colLetter}${rowIndex + 1}`,
+        valueInputOption: "USER_ENTERED",
+        resource: { values: [[attendanceStatus]] }
+    });
+
+    // Update Daily Report Updates
+    await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `'${sheetTitle}'!${colLetter}${rowIndex + 2}`,
+        valueInputOption: "USER_ENTERED",
+        resource: { values: [[dReport]] }
+    });
+
+    // Update Total Time Worked
+    await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `'${sheetTitle}'!${colLetter}${rowIndex + 3}`,
+        valueInputOption: "USER_ENTERED",
+        resource: { values: [[workedStr]] }
+    });
 };
 
-module.exports = {
-    syncRecordToSheet,
-    buildSheetRow,
-    formatHHMMSS,
-};
+module.exports = { syncRecordToSheet, formatHHMMSS, getSheetsInstance };
