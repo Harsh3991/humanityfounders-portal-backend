@@ -12,6 +12,7 @@ dotenv.config();
 const connectDB = require("./config/db");
 const corsOptions = require("./config/cors");
 const errorHandler = require("./middleware/errorHandler");
+const { startCronJobs } = require("./utils/cronJobs");
 
 // Initialize Express
 const app = express();
@@ -64,6 +65,9 @@ const PORT = process.env.PORT || 5000;
 
 // Connect to MongoDB immediately at boot up
 connectDB();
+
+// Starting Cron Jobs
+startCronJobs();
 
 // Only listen if not running in a serverless (like Vercel) environment
 if (!process.env.VERCEL) {

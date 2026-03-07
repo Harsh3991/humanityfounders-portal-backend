@@ -45,6 +45,11 @@ const taskSchema = new mongoose.Schema(
 
         dueDate: { type: Date },
 
+        overdueEmailSent: {
+            type: Boolean,
+            default: false,
+        },
+
         // Sub-tasks (PRD: expandable items under parent with independent completion)
         parentTask: {
             type: mongoose.Schema.Types.ObjectId,

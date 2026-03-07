@@ -1,6 +1,7 @@
 const Attendance = require("../models/Attendance");
 const User = require("../models/User");
 const googleSheetsService = require("../services/googleSheetsService");
+const { sendAbsentEmail } = require("../utils/emailService");
 
 const { getTodayRangeIST, getMonthRangeIST } = require("../utils/dateUtils");
 
@@ -87,9 +88,9 @@ const clockIn = async (req, res, next) => {
 
         // --- Automatically Sync to Google Sheets on Clock In ---
         try {
-            const user = await User.findById(req.user._id).select("fullName");
-            const userName = user ? user.fullName : "Unknown";
-            await googleSheetsService.syncRecordToSheet(userName, record);
+            const user = await User.findById(req.user._id).select("fullName department");
+            const userData = user ? { fullName: user.fullName, department: user.department } : { fullName: "Unknown", department: "" };
+            await googleSheetsService.syncRecordToSheet(userData, record);
         } catch (syncError) {
             console.error("Failed to auto-sync clock-in to Google Sheets:", syncError);
         }
@@ -272,9 +273,9 @@ const clockOut = async (req, res, next) => {
 
         // --- Automatically Sync to Google Sheets on Clock Out ---
         try {
-            const user = await User.findById(req.user._id).select("fullName");
-            const userName = user ? user.fullName : "Unknown";
-            await googleSheetsService.syncRecordToSheet(userName, record);
+            const user = await User.findById(req.user._id).select("fullName department");
+            const userData = user ? { fullName: user.fullName, department: user.department } : { fullName: "Unknown", department: "" };
+            await googleSheetsService.syncRecordToSheet(userData, record);
         } catch (syncError) {
             console.error("Failed to auto-sync clock-out to Google Sheets:", syncError);
             // We intentionally don't throw here so the user still successfully clocks out
@@ -594,9 +595,14 @@ const adminOverride = async (req, res, next) => {
 
         const [yyyy, mm, dd] = date.split('-');
         const targetDate = new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), 12, 0, 0));
-        const { start } = getTodayRangeIST(targetDate);
+        const { start, end } = getTodayRangeIST(targetDate);
 
-        let record = await Attendance.findOne({ user: userId, date: start });
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        const records = await Attendance.find({ user: userId, date: { $gte: start, $lte: end } });
 
         let activeSeconds = 0;
         if (status === 'present') {
@@ -604,8 +610,8 @@ const adminOverride = async (req, res, next) => {
             activeSeconds = 28800;
         }
 
-        if (!record) {
-            record = new Attendance({
+        if (records.length === 0) {
+            const newRecord = new Attendance({
                 user: userId,
                 date: start,
                 status: status === 'present' ? 'clocked-out' : 'absent',
@@ -614,33 +620,52 @@ const adminOverride = async (req, res, next) => {
                 clockOut: status === 'present' ? new Date(start.getTime() + activeSeconds * 1000) : null,
                 dailyReport: "Admin overridden."
             });
+            await newRecord.save();
         } else {
-            // Check if there are genuine user logs in this record
-            const hasRealLogs = (record.clockIn != null || (record.sessions && record.sessions.length > 0)) &&
-                (!record.dailyReport || !record.dailyReport.startsWith("Admin "));
+            for (let i = 0; i < records.length; i++) {
+                const record = records[i];
+                // Check if there are genuine user logs in this record
+                const hasRealLogs = (record.clockIn != null || (record.sessions && record.sessions.length > 0)) &&
+                    (!record.dailyReport || !record.dailyReport.startsWith("Admin "));
 
-            record.status = status === 'present' ? 'clocked-out' : 'absent';
-            record.lastActiveAt = null; // stop any active timer if it was running
+                record.status = status === 'present' ? 'clocked-out' : 'absent';
+                record.lastActiveAt = null; // stop any active timer if it was running
 
-            if (!hasRealLogs) {
-                // No genuine logs exist, safe to overwrite with Admin defaults
-                if (status === 'absent') {
-                    record.activeSeconds = 0;
-                    record.clockIn = null;
-                    record.clockOut = null;
-                    record.dailyReport = "Admin marked absent.";
+                if (!hasRealLogs) {
+                    // No genuine logs exist, safe to overwrite with Admin defaults
+                    if (status === 'absent') {
+                        record.activeSeconds = 0;
+                        record.clockIn = null;
+                        record.clockOut = null;
+                        record.dailyReport = "Admin marked absent.";
+                    } else {
+                        record.activeSeconds = activeSeconds;
+                        record.clockIn = start;
+                        record.clockOut = new Date(start.getTime() + activeSeconds * 1000);
+                        record.dailyReport = "Admin overridden.";
+                    }
                 } else {
-                    record.activeSeconds = activeSeconds;
-                    record.clockIn = start;
-                    record.clockOut = new Date(start.getTime() + activeSeconds * 1000);
-                    record.dailyReport = "Admin overridden.";
+                    // We have real logs! 
+                    if (status === 'present' && record.activeSeconds < 28800) {
+                        record.activeSeconds = 28800; // Bump them to a full day if they fell short
+                        if (!record.dailyReport.includes("[Admin supplemented hours]")) {
+                            record.dailyReport += "\n[Admin supplemented hours]";
+                        }
+                    }
                 }
+                await record.save();
             }
-            // else: We have real logs! We do NOT overwrite activeSeconds, clockIn, clockOut, or dailyReport.
-            // Their real data is perfectly preserved!
         }
 
-        await record.save();
+        if (status === 'absent' && user.status === 'active') {
+            const displayDate = new Date(date).toLocaleDateString(undefined, {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+            sendAbsentEmail(user.email, user.fullName, displayDate).catch(err => console.error("Immediate absent email err:", err));
+        }
 
         res.status(200).json({
             success: true,
@@ -663,7 +688,7 @@ const syncGoogleSheet = async (req, res, next) => {
         const records = await Attendance.find({
             date: { $gte: start, $lte: end },
         })
-            .populate("user", "fullName email")
+            .populate("user", "fullName department")
             .sort({ date: 1 })
             .lean();
 
@@ -673,8 +698,8 @@ const syncGoogleSheet = async (req, res, next) => {
 
         // Sync each record using the new upsert logic
         for (const record of records) {
-            const userName = record.user ? record.user.fullName : "Unknown";
-            await googleSheetsService.syncRecordToSheet(userName, record);
+            const userData = record.user ? { fullName: record.user.fullName, department: record.user.department } : { fullName: "Unknown", department: "" };
+            await googleSheetsService.syncRecordToSheet(userData, record);
         }
 
         res.status(200).json({

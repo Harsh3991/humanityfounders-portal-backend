@@ -1,6 +1,7 @@
 const Task = require("../models/Task");
 const Project = require("../models/Project");
 const { ROLES } = require("../utils/constants");
+const { sendOverdueTaskEmail } = require("../utils/emailService");
 
 // ─────────────────────────────────────────────────
 // POST /api/tasks
@@ -76,9 +77,19 @@ const createTask = async (req, res, next) => {
             });
         }
 
-        await task.populate("assignees", "fullName email department");
+        await task.populate("assignees", "fullName email department status");
         await task.populate("createdBy", "fullName email");
         await task.populate("project", "name");
+
+        if (task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "done") {
+            task.overdueEmailSent = true;
+            await Task.findByIdAndUpdate(task._id, { overdueEmailSent: true });
+            for (const assignee of task.assignees) {
+                if (assignee.status === "active") {
+                    sendOverdueTaskEmail(assignee.email, assignee.fullName, task.name, task.dueDate).catch(err => console.error("Immediate overdue email err:", err));
+                }
+            }
+        }
 
         res.status(201).json({
             success: true,
@@ -253,7 +264,12 @@ const updateTask = async (req, res, next) => {
         if (name !== undefined) task.name = name;
         if (description !== undefined) task.description = description;
         if (assignees !== undefined) task.assignees = assignees;
-        if (dueDate !== undefined) task.dueDate = dueDate;
+        if (dueDate !== undefined) {
+            task.dueDate = dueDate;
+            if (new Date(dueDate) >= new Date()) {
+                task.overdueEmailSent = false;
+            }
+        }
         if (priority !== undefined) task.priority = priority;
 
         // Status workflow validation
@@ -289,9 +305,19 @@ const updateTask = async (req, res, next) => {
             });
         }
 
-        await task.populate("assignees", "fullName email department");
+        await task.populate("assignees", "fullName email department status");
         await task.populate("createdBy", "fullName email");
         await task.populate("project", "name");
+
+        if (task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "done" && !task.overdueEmailSent) {
+            task.overdueEmailSent = true;
+            await Task.findByIdAndUpdate(task._id, { overdueEmailSent: true });
+            for (const assignee of task.assignees) {
+                if (assignee.status === "active") {
+                    sendOverdueTaskEmail(assignee.email, assignee.fullName, task.name, task.dueDate).catch(err => console.error("Immediate overdue email err:", err));
+                }
+            }
+        }
 
         res.status(200).json({
             success: true,
