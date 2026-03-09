@@ -49,8 +49,25 @@ const startCronJobs = () => {
                     date: { $gte: yesterday, $lt: today }
                 });
 
-                // If there's no record or the record specifically marks them absent
-                if (!record || record.status === "absent") {
+                // If there's no record, officially create one to trigger the sheet sync
+                if (!record) {
+                    record = new Attendance({
+                        user: user._id,
+                        date: yesterday,
+                        status: "absent",
+                        activeSeconds: 0,
+                        dailyReport: "System marked absent (No clock in/out)."
+                    });
+                    await record.save(); // Trigger Mongoose post-save hook to update Google Sheet
+
+                    const dateStr = yesterday.toLocaleDateString(undefined, {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                    });
+                    await sendAbsentEmail(user.email, user.fullName, dateStr);
+                } else if (record.status === "absent") {
                     const dateStr = yesterday.toLocaleDateString(undefined, {
                         weekday: 'long',
                         year: 'numeric',

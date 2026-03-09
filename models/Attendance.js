@@ -65,6 +65,24 @@ attendanceSchema.index({ user: 1, date: 1 }, { unique: true });
 attendanceSchema.index({ date: 1 }); // Boosts full-day dashboard stat lookups
 attendanceSchema.index({ status: 1 }); // Boosts Admin panel "active status" scans
 
+// Global Mongoose Hook: Auto-sync newly created/modified records with the Google Sheet
+attendanceSchema.post('save', async function (doc) {
+    try {
+        const User = mongoose.model("User");
+        const user = await User.findById(doc.user).select("fullName department");
+
+        if (user) {
+            const googleSheetsService = require("../services/googleSheetsService");
+            await googleSheetsService.syncRecordToSheet(
+                { fullName: user.fullName, department: user.department },
+                doc
+            );
+        }
+    } catch (error) {
+        console.error("Auto-sync to Google Sheets failed from Mongoose Hook:", error);
+    }
+});
+
 const Attendance = mongoose.model("Attendance", attendanceSchema);
 
 module.exports = Attendance;

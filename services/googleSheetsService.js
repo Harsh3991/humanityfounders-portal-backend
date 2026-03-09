@@ -132,7 +132,7 @@ const ensureMonthSheet = async (sheets, spreadsheetId, dateObj) => {
                             range: { sheetId: sheetId, startRowIndex: 1 },
                             cell: {
                                 userEnteredFormat: {
-                                    wrapStrategy: "CLIP",
+                                    wrapStrategy: "WRAP",
                                     verticalAlignment: "MIDDLE"
                                 }
                             },
@@ -154,7 +154,7 @@ const ensureMonthSheet = async (sheets, spreadsheetId, dateObj) => {
                     {
                         updateDimensionProperties: {
                             range: { sheetId: sheetId, dimension: "COLUMNS", startIndex: 2 },
-                            properties: { pixelSize: 150 },
+                            properties: { pixelSize: 200 },
                             fields: "pixelSize"
                         }
                     }
@@ -230,7 +230,7 @@ const syncRecordToSheet = async (user, record) => {
                 requests.push({
                     repeatCell: {
                         range: { sheetId, startRowIndex: rowIndex, endRowIndex: rowIndex + 1 },
-                        cell: { userEnteredFormat: { backgroundColor: { red: 217 / 255, green: 234 / 255, blue: 211 / 255 }, wrapStrategy: "CLIP", verticalAlignment: "TOP" } },
+                        cell: { userEnteredFormat: { backgroundColor: { red: 217 / 255, green: 234 / 255, blue: 211 / 255 }, wrapStrategy: "WRAP", verticalAlignment: "TOP" } },
                         fields: "userEnteredFormat(backgroundColor,wrapStrategy,verticalAlignment)"
                     }
                 });
@@ -238,7 +238,7 @@ const syncRecordToSheet = async (user, record) => {
                 requests.push({
                     repeatCell: {
                         range: { sheetId, startRowIndex: rowIndex + 1, endRowIndex: rowIndex + 2 },
-                        cell: { userEnteredFormat: { backgroundColor: { red: 207 / 255, green: 226 / 255, blue: 243 / 255 }, wrapStrategy: "CLIP", verticalAlignment: "TOP" } },
+                        cell: { userEnteredFormat: { backgroundColor: { red: 207 / 255, green: 226 / 255, blue: 243 / 255 }, wrapStrategy: "WRAP", verticalAlignment: "TOP" } },
                         fields: "userEnteredFormat(backgroundColor,wrapStrategy,verticalAlignment)"
                     }
                 });
@@ -246,18 +246,11 @@ const syncRecordToSheet = async (user, record) => {
                 requests.push({
                     repeatCell: {
                         range: { sheetId, startRowIndex: rowIndex + 2, endRowIndex: rowIndex + 3 },
-                        cell: { userEnteredFormat: { backgroundColor: { red: 244 / 255, green: 204 / 255, blue: 204 / 255 }, wrapStrategy: "CLIP", verticalAlignment: "TOP" } },
+                        cell: { userEnteredFormat: { backgroundColor: { red: 244 / 255, green: 204 / 255, blue: 204 / 255 }, wrapStrategy: "WRAP", verticalAlignment: "TOP" } },
                         fields: "userEnteredFormat(backgroundColor,wrapStrategy,verticalAlignment)"
                     }
                 });
-                // Force fixed row heights so newlines don't cause massive vertical stretching
-                requests.push({
-                    updateDimensionProperties: {
-                        range: { sheetId, dimension: "ROWS", startIndex: rowIndex, endIndex: rowIndex + 3 },
-                        properties: { pixelSize: 30 },
-                        fields: "pixelSize"
-                    }
-                });
+                // Let row heights automatically adjust instead of having a fixed size
                 // All Borders for the 3 rows
                 requests.push({
                     updateBorders: {
