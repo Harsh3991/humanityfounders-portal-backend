@@ -86,15 +86,6 @@ const clockIn = async (req, res, next) => {
 
         await record.save();
 
-        // --- Automatically Sync to Google Sheets on Clock In ---
-        try {
-            const user = await User.findById(req.user._id).select("fullName department");
-            const userData = user ? { fullName: user.fullName, department: user.department } : { fullName: "Unknown", department: "" };
-            await googleSheetsService.syncRecordToSheet(userData, record);
-        } catch (syncError) {
-            console.error("Failed to auto-sync clock-in to Google Sheets:", syncError);
-        }
-
         res.status(200).json({
             success: true,
             message: "Clocked in successfully ⏱️",
@@ -270,16 +261,6 @@ const clockOut = async (req, res, next) => {
             (sum, b) => sum + (b.duration || 0),
             0
         );
-
-        // --- Automatically Sync to Google Sheets on Clock Out ---
-        try {
-            const user = await User.findById(req.user._id).select("fullName department");
-            const userData = user ? { fullName: user.fullName, department: user.department } : { fullName: "Unknown", department: "" };
-            await googleSheetsService.syncRecordToSheet(userData, record);
-        } catch (syncError) {
-            console.error("Failed to auto-sync clock-out to Google Sheets:", syncError);
-            // We intentionally don't throw here so the user still successfully clocks out
-        }
 
         res.status(200).json({
             success: true,

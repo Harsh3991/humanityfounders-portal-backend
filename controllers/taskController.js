@@ -250,7 +250,7 @@ const getTaskById = async (req, res, next) => {
 // ─────────────────────────────────────────────────
 const updateTask = async (req, res, next) => {
     try {
-        const { name, description, assignees, dueDate, priority, status } = req.body;
+        const { name, description, assignees, dueDate, priority, status, deadlineExtended } = req.body;
 
         const task = await Task.findById(req.params.id);
         if (!task) {
@@ -264,7 +264,11 @@ const updateTask = async (req, res, next) => {
         if (name !== undefined) task.name = name;
         if (description !== undefined) task.description = description;
         if (assignees !== undefined) task.assignees = assignees;
+        if (deadlineExtended !== undefined) task.deadlineExtended = deadlineExtended;
         if (dueDate !== undefined) {
+            if (task.dueDate && new Date(dueDate) > new Date(task.dueDate)) {
+                task.deadlineExtended = true;
+            }
             task.dueDate = dueDate;
             if (new Date(dueDate) >= new Date()) {
                 task.overdueEmailSent = false;
