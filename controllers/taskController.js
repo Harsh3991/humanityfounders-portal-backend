@@ -400,9 +400,26 @@ const getTasksByUser = async (req, res, next) => {
     }
 };
 
+// Helper to recursively delete tasks and all their subtask children
+const deleteTasksRecursively = async (taskIds) => {
+    if (!taskIds || taskIds.length === 0) return;
+
+    // Find all immediate subtasks of these tasks
+    const subtasks = await Task.find({ parentTask: { $in: taskIds } }).select("_id");
+    const subtaskIds = subtasks.map((s) => s._id);
+
+    // If there ARE subtasks, recursively delete them first
+    if (subtaskIds.length > 0) {
+        await deleteTasksRecursively(subtaskIds);
+    }
+
+    // Finally delete the current batch of tasks
+    await Task.deleteMany({ _id: { $in: taskIds } });
+};
+
 // ─────────────────────────────────────────────────
 // DELETE /api/tasks/:id
-// Delete a task and all its subtasks
+// Delete a task and all its subtasks (recursively)
 // ─────────────────────────────────────────────────
 const deleteTask = async (req, res, next) => {
     try {
@@ -415,15 +432,12 @@ const deleteTask = async (req, res, next) => {
             });
         }
 
-        // Delete all subtasks first
-        await Task.deleteMany({ parentTask: task._id });
-
-        // Delete the task
-        await Task.findByIdAndDelete(req.params.id);
+        // Use our recursive helper to delete the task and everything under it
+        await deleteTasksRecursively([task._id]);
 
         res.status(200).json({
             success: true,
-            message: "Task and subtasks deleted successfully",
+            message: "Task and all subtasks deleted successfully",
         });
     } catch (error) {
         next(error);

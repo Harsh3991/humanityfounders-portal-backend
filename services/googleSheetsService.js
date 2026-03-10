@@ -119,7 +119,7 @@ const ensureMonthSheet = async (sheets, spreadsheetId, dateObj) => {
                             cell: {
                                 userEnteredFormat: {
                                     backgroundColor: { red: 0.92, green: 0.96, blue: 1.0 }, // Light cyan-blue
-                                    textFormat: { foregroundColor: { red: 0.2, green: 0.3, blue: 0.4 }, bold: true }, // Dark slate
+                                    textFormat: { foregroundColor: { red: 0.2, green: 0.3, blue: 0.4 }, bold: true, fontFamily: "Arial" }, // Dark slate
                                     horizontalAlignment: "CENTER",
                                     verticalAlignment: "MIDDLE"
                                 }
@@ -153,8 +153,22 @@ const ensureMonthSheet = async (sheets, spreadsheetId, dateObj) => {
                     },
                     {
                         updateDimensionProperties: {
+                            range: { sheetId: sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: 1 },
+                            properties: { pixelSize: 250 },
+                            fields: "pixelSize"
+                        }
+                    },
+                    {
+                        updateDimensionProperties: {
+                            range: { sheetId: sheetId, dimension: "COLUMNS", startIndex: 1, endIndex: 2 },
+                            properties: { pixelSize: 180 },
+                            fields: "pixelSize"
+                        }
+                    },
+                    {
+                        updateDimensionProperties: {
                             range: { sheetId: sheetId, dimension: "COLUMNS", startIndex: 2 },
-                            properties: { pixelSize: 200 },
+                            properties: { pixelSize: 250 },
                             fields: "pixelSize"
                         }
                     }
@@ -198,7 +212,8 @@ const syncRecordToSheet = async (user, record) => {
         const newRows = [
             [user.fullName, user.department || "Employee"],
             ["Daily Update", ""],
-            ["Total Time Worked", ""]
+            ["Total Time Worked", ""],
+            ["-", "-"] // Visible spacer to ensure Row counts are incremented correctly by Sheets
         ];
 
         await sheets.spreadsheets.values.append({
@@ -230,37 +245,80 @@ const syncRecordToSheet = async (user, record) => {
                 requests.push({
                     repeatCell: {
                         range: { sheetId, startRowIndex: rowIndex, endRowIndex: rowIndex + 1 },
-                        cell: { userEnteredFormat: { backgroundColor: { red: 217 / 255, green: 234 / 255, blue: 211 / 255 }, wrapStrategy: "WRAP", verticalAlignment: "TOP" } },
-                        fields: "userEnteredFormat(backgroundColor,wrapStrategy,verticalAlignment)"
+                        cell: {
+                            userEnteredFormat: {
+                                backgroundColor: { red: 217 / 255, green: 234 / 255, blue: 211 / 255 },
+                                wrapStrategy: "WRAP",
+                                verticalAlignment: "TOP",
+                                horizontalAlignment: "CENTER",
+                                textFormat: { fontFamily: "Arial", bold: true }
+                            }
+                        },
+                        fields: "userEnteredFormat(backgroundColor,wrapStrategy,verticalAlignment,horizontalAlignment,textFormat)"
                     }
                 });
                 // Row 2 (Index rowIndex + 1): Light Blue -> RGB 207, 226, 243
                 requests.push({
                     repeatCell: {
                         range: { sheetId, startRowIndex: rowIndex + 1, endRowIndex: rowIndex + 2 },
-                        cell: { userEnteredFormat: { backgroundColor: { red: 207 / 255, green: 226 / 255, blue: 243 / 255 }, wrapStrategy: "WRAP", verticalAlignment: "TOP" } },
-                        fields: "userEnteredFormat(backgroundColor,wrapStrategy,verticalAlignment)"
+                        cell: {
+                            userEnteredFormat: {
+                                backgroundColor: { red: 207 / 255, green: 226 / 255, blue: 243 / 255 },
+                                wrapStrategy: "WRAP",
+                                verticalAlignment: "TOP",
+                                horizontalAlignment: "CENTER",
+                                textFormat: { fontFamily: "Arial", bold: true, foregroundColor: { red: 0.2, green: 0.3, blue: 0.4 } }
+                            }
+                        },
+                        fields: "userEnteredFormat(backgroundColor,wrapStrategy,verticalAlignment,horizontalAlignment,textFormat)"
                     }
                 });
                 // Row 3 (Index rowIndex + 2): Light Pink -> RGB 244, 204, 204
                 requests.push({
                     repeatCell: {
                         range: { sheetId, startRowIndex: rowIndex + 2, endRowIndex: rowIndex + 3 },
-                        cell: { userEnteredFormat: { backgroundColor: { red: 244 / 255, green: 204 / 255, blue: 204 / 255 }, wrapStrategy: "WRAP", verticalAlignment: "TOP" } },
-                        fields: "userEnteredFormat(backgroundColor,wrapStrategy,verticalAlignment)"
+                        cell: {
+                            userEnteredFormat: {
+                                backgroundColor: { red: 244 / 255, green: 204 / 255, blue: 204 / 255 },
+                                wrapStrategy: "WRAP",
+                                verticalAlignment: "TOP",
+                                horizontalAlignment: "CENTER",
+                                textFormat: { fontFamily: "Arial", bold: true }
+                            }
+                        },
+                        fields: "userEnteredFormat(backgroundColor,wrapStrategy,verticalAlignment,horizontalAlignment,textFormat)"
                     }
                 });
-                // Let row heights automatically adjust instead of having a fixed size
-                // All Borders for the 3 rows
+                // Row 4 (Index rowIndex + 3): Spacer row - adjust height and background
+                requests.push({
+                    repeatCell: {
+                        range: { sheetId, startRowIndex: rowIndex + 3, endRowIndex: rowIndex + 4 },
+                        cell: {
+                            userEnteredFormat: {
+                                backgroundColor: { red: 0.98, green: 0.98, blue: 0.98 },
+                                textFormat: { foregroundColor: { red: 0.98, green: 0.98, blue: 0.98 } } // Hide the "-" character
+                            }
+                        },
+                        fields: "userEnteredFormat(backgroundColor,textFormat)"
+                    }
+                });
+                requests.push({
+                    updateDimensionProperties: {
+                        range: { sheetId, dimension: "ROWS", startIndex: rowIndex + 3, endRowIndex: rowIndex + 4 },
+                        properties: { pixelSize: 25 },
+                        fields: "pixelSize"
+                    }
+                });
+                // All Borders for the 3 main rows
                 requests.push({
                     updateBorders: {
                         range: { sheetId, startRowIndex: rowIndex, endRowIndex: rowIndex + 3 },
-                        top: { style: "SOLID", color: { red: 0.8, green: 0.8, blue: 0.8 } },
-                        bottom: { style: "SOLID", color: { red: 0.8, green: 0.8, blue: 0.8 } },
-                        left: { style: "SOLID", color: { red: 0.8, green: 0.8, blue: 0.8 } },
-                        right: { style: "SOLID", color: { red: 0.8, green: 0.8, blue: 0.8 } },
-                        innerHorizontal: { style: "SOLID", color: { red: 0.8, green: 0.8, blue: 0.8 } },
-                        innerVertical: { style: "SOLID", color: { red: 0.8, green: 0.8, blue: 0.8 } }
+                        top: { style: "SOLID", color: { red: 0.6, green: 0.6, blue: 0.6 } },
+                        bottom: { style: "SOLID", color: { red: 0.6, green: 0.6, blue: 0.6 } },
+                        left: { style: "SOLID", color: { red: 0.6, green: 0.6, blue: 0.6 } },
+                        right: { style: "SOLID", color: { red: 0.6, green: 0.6, blue: 0.6 } },
+                        innerHorizontal: { style: "SOLID", color: { red: 0.6, green: 0.6, blue: 0.6 } },
+                        innerVertical: { style: "SOLID", color: { red: 0.6, green: 0.6, blue: 0.6 } }
                     }
                 });
 
@@ -288,28 +346,18 @@ const syncRecordToSheet = async (user, record) => {
     let dReport = record.dailyReport || "";
     let workedStr = formatHHMMSS(record.activeSeconds || 0);
 
-    // Update Attendance Status
+    // BATCH UPDATE: All 3 rows in one call to avoid rate limits
     await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: `'${sheetTitle}'!${colLetter}${rowIndex + 1}`,
+        range: `'${sheetTitle}'!${colLetter}${rowIndex + 1}:${colLetter}${rowIndex + 3}`,
         valueInputOption: "USER_ENTERED",
-        resource: { values: [[attendanceStatus]] }
-    });
-
-    // Update Daily Report Updates
-    await sheets.spreadsheets.values.update({
-        spreadsheetId,
-        range: `'${sheetTitle}'!${colLetter}${rowIndex + 2}`,
-        valueInputOption: "USER_ENTERED",
-        resource: { values: [[dReport]] }
-    });
-
-    // Update Total Time Worked
-    await sheets.spreadsheets.values.update({
-        spreadsheetId,
-        range: `'${sheetTitle}'!${colLetter}${rowIndex + 3}`,
-        valueInputOption: "USER_ENTERED",
-        resource: { values: [[workedStr]] }
+        resource: {
+            values: [
+                [attendanceStatus],
+                [dReport],
+                [workedStr]
+            ]
+        }
     });
 };
 

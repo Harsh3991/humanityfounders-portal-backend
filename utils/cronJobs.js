@@ -87,6 +87,36 @@ const startCronJobs = () => {
     // Start the cron job
     dailyJob.start();
     console.log("🕒 Cron jobs scheduled. Daily job set for 12:00 AM (Midnight).");
+
+    // 3. Keep-alive job to prevent Heroku from sleeping (Runs every 15 minutes)
+    // IMPORTANT: Make sure to set APP_URL in environment variables
+    const keepAliveJob = new CronJob("*/15 * * * *", async function () {
+        const appUrl = process.env.APP_URL;
+        if (!appUrl) {
+            return; // Silently skip if no URL is provided
+        }
+
+        try {
+            const https = require('https');
+            const http = require('http');
+            const protocol = appUrl.startsWith('https') ? https : http;
+
+            protocol.get(`${appUrl}/api/health`, (res) => {
+                if (res.statusCode === 200) {
+                    console.log("⚡ Keep-alive ping successful. Server stays awake.");
+                }
+            }).on('error', (e) => {
+                console.error(`❌ Keep-alive ping failed: ${e.message}`);
+            });
+        } catch (err) {
+            console.error("❌ Error in keep-alive cron:", err);
+        }
+    });
+
+    if (process.env.NODE_ENV === "production") {
+        keepAliveJob.start();
+        console.log("🚀 Keep-alive job started (15m interval).");
+    }
 };
 
 module.exports = { startCronJobs };
