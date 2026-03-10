@@ -50,10 +50,24 @@ async function run() {
             }
         },
         {
-            // Increase column widths for all date columns (starting from index 2, i.e., column C onwards)
+            // Increase column widths for all columns
+            updateDimensionProperties: {
+                range: { sheetId: sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: 1 },
+                properties: { pixelSize: 250 },
+                fields: "pixelSize"
+            }
+        },
+        {
+            updateDimensionProperties: {
+                range: { sheetId: sheetId, dimension: "COLUMNS", startIndex: 1, endIndex: 2 },
+                properties: { pixelSize: 180 },
+                fields: "pixelSize"
+            }
+        },
+        {
             updateDimensionProperties: {
                 range: { sheetId: sheetId, dimension: "COLUMNS", startIndex: 2 },
-                properties: { pixelSize: 200 },
+                properties: { pixelSize: 250 },
                 fields: "pixelSize"
             }
         },
