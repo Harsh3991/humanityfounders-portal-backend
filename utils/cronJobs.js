@@ -44,7 +44,7 @@ const startCronJobs = () => {
 
             for (const user of activeUsers) {
                 // Find if user has attendance for yesterday
-                const record = await Attendance.findOne({
+                let record = await Attendance.findOne({
                     user: user._id,
                     date: { $gte: yesterday, $lt: today }
                 });

@@ -251,7 +251,7 @@ const syncRecordToSheet = async (user, record) => {
                                 wrapStrategy: "WRAP",
                                 verticalAlignment: "TOP",
                                 horizontalAlignment: "CENTER",
-                                textFormat: { fontFamily: "Arial", bold: true }
+                                textFormat: { fontFamily: "Arial", bold: true, foregroundColor: { red: 0, green: 0, blue: 0 } }
                             }
                         },
                         fields: "userEnteredFormat(backgroundColor,wrapStrategy,verticalAlignment,horizontalAlignment,textFormat)"
@@ -283,7 +283,7 @@ const syncRecordToSheet = async (user, record) => {
                                 wrapStrategy: "WRAP",
                                 verticalAlignment: "TOP",
                                 horizontalAlignment: "CENTER",
-                                textFormat: { fontFamily: "Arial", bold: true }
+                                textFormat: { fontFamily: "Arial", bold: true, foregroundColor: { red: 0, green: 0, blue: 0 } }
                             }
                         },
                         fields: "userEnteredFormat(backgroundColor,wrapStrategy,verticalAlignment,horizontalAlignment,textFormat)"
@@ -304,7 +304,7 @@ const syncRecordToSheet = async (user, record) => {
                 });
                 requests.push({
                     updateDimensionProperties: {
-                        range: { sheetId, dimension: "ROWS", startIndex: rowIndex + 3, endRowIndex: rowIndex + 4 },
+                        range: { sheetId, dimension: "ROWS", startIndex: rowIndex + 3, endIndex: rowIndex + 4 },
                         properties: { pixelSize: 25 },
                         fields: "pixelSize"
                     }
@@ -361,4 +361,116 @@ const syncRecordToSheet = async (user, record) => {
     });
 };
 
-module.exports = { syncRecordToSheet, formatHHMMSS, getSheetsInstance };
+/**
+ * Remove all rows for a given employee (by name) from every month sheet tab.
+ * Deletes the 4-row block (name row + daily update + total time + spacer).
+ * employeeName: string — must match the cell A value exactly.
+ */
+const removeEmployeeFromSheets = async (employeeName) => {
+    const instance = getSheetsInstance();
+    if (!instance) return;
+    const { sheets, spreadsheetId } = instance;
+
+    try {
+        const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
+        const allSheets = spreadsheet.data.sheets || [];
+
+        for (const sheetMeta of allSheets) {
+            const sheetTitle = sheetMeta.properties.title;
+            const sheetId = sheetMeta.properties.sheetId;
+
+            // Read column A to find the employee row
+            const readRes = await sheets.spreadsheets.values.get({
+                spreadsheetId,
+                range: `'${sheetTitle}'!A:A`,
+            });
+
+            const colA = readRes.data.values || [];
+            let rowIndex = -1;
+            for (let i = 0; i < colA.length; i++) {
+                if (colA[i] && colA[i][0] === employeeName) {
+                    rowIndex = i;
+                    break;
+                }
+            }
+
+            if (rowIndex === -1) continue; // This employee has no rows on this sheet
+
+            // Delete 4 rows starting at rowIndex (0-indexed)
+            await sheets.spreadsheets.batchUpdate({
+                spreadsheetId,
+                resource: {
+                    requests: [{
+                        deleteDimension: {
+                            range: {
+                                sheetId,
+                                dimension: "ROWS",
+                                startIndex: rowIndex,
+                                endIndex: rowIndex + 4  // name + daily update + total time + spacer
+                            }
+                        }
+                    }]
+                }
+            });
+
+            console.log(`🗑️  Removed employee "${employeeName}" from sheet tab "${sheetTitle}" (rows ${rowIndex + 1}–${rowIndex + 4})`);
+        }
+    } catch (err) {
+        console.error(`❌ removeEmployeeFromSheets failed for "${employeeName}":`, err.message);
+    }
+};
+
+/**
+ * Update an employee's name and/or department across ALL month sheet tabs.
+ * Call this after updating a user profile (fullName or department changed).
+ *
+ * oldName:      the name currently in the sheet (before the update)
+ * newName:      the updated full name
+ * newDepartment: the updated department
+ */
+const renameEmployeeInSheets = async (oldName, newName, newDepartment) => {
+    const instance = getSheetsInstance();
+    if (!instance) return;
+    const { sheets, spreadsheetId } = instance;
+
+    try {
+        const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
+        const allSheets = spreadsheet.data.sheets || [];
+
+        for (const sheetMeta of allSheets) {
+            const sheetTitle = sheetMeta.properties.title;
+
+            // Read columns A & B to find the row and confirm the name
+            const readRes = await sheets.spreadsheets.values.get({
+                spreadsheetId,
+                range: `'${sheetTitle}'!A:B`,
+            });
+
+            const rows = readRes.data.values || [];
+            let rowIndex = -1;
+            for (let i = 0; i < rows.length; i++) {
+                if (rows[i] && rows[i][0] === oldName) {
+                    rowIndex = i;
+                    break;
+                }
+            }
+
+            if (rowIndex === -1) continue; // Not on this sheet tab
+
+            // Update A (name) and B (department) for the employee header row only
+            await sheets.spreadsheets.values.update({
+                spreadsheetId,
+                range: `'${sheetTitle}'!A${rowIndex + 1}:B${rowIndex + 1}`,
+                valueInputOption: "USER_ENTERED",
+                resource: { values: [[newName, newDepartment || rows[rowIndex][1] || "Employee"]] }
+            });
+
+            console.log(`✏️  Renamed "${oldName}" → "${newName}" on sheet tab "${sheetTitle}" (row ${rowIndex + 1})`);
+        }
+    } catch (err) {
+        console.error(`❌ renameEmployeeInSheets failed for "${oldName}":`, err.message);
+    }
+};
+
+module.exports = { syncRecordToSheet, formatHHMMSS, getSheetsInstance, removeEmployeeFromSheets, renameEmployeeInSheets };
+
