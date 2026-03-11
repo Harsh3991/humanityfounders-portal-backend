@@ -27,11 +27,19 @@ const getEmployeeWorklog = async (req, res, next) => {
         const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
 
         // ─── Parallel fetch all data sources ───
-        const [projects, tasks, attendanceRecords, auditLogs] = await Promise.all([
-            // 1. Projects the employee is a member of
-            Project.find({ members: id })
-                .select("name description status deadline members createdAt")
-                .populate("members", "fullName email")
+        // Determine which projects to show by looking ONLY at current task assignments.
+        // We deliberately avoid Project.members because it is an append-only set that
+        // never removes a person when they are unassigned from a task — this would
+        // cause "ghost" project entries in the worklog for people who were once assigned
+        // but have since been removed from all tasks in that project.
+        const employeeTasks = await Task.find({ assignees: id }).select("project").lean();
+        const taskProjectIds = [...new Set(employeeTasks.map((t) => t.project?.toString()).filter(Boolean))];
+
+        const [rawProjects, tasks, attendanceRecords, auditLogs] = await Promise.all([
+            // 1. Projects where the employee CURRENTLY has at least one task assigned.
+            //    (task-assignee list is always up-to-date; Project.members is not)
+            Project.find({ _id: { $in: taskProjectIds } })
+                .select("name description status createdAt")
                 .populate("createdBy", "fullName email")
                 .sort({ createdAt: -1 })
                 .lean(),
@@ -197,6 +205,48 @@ const getEmployeeWorklog = async (req, res, next) => {
 
         // Sort timeline by timestamp descending (newest first)
         timeline.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+        // ─── Compute unique task-assignee count per project ───
+        // Fetch all tasks for each relevant project (to count unique assignees)
+        const projectIds = rawProjects.map((p) => p._id);
+        const allProjectTasks = await Task.find({ project: { $in: projectIds } })
+            .select("project assignees")
+            .lean();
+
+        // Collect every unique assignee ID referenced across all project tasks
+        const allRawAssigneeIds = new Set();
+        allProjectTasks.forEach((t) => {
+            (t.assignees || []).forEach((a) => allRawAssigneeIds.add(a.toString()));
+        });
+
+        // Verify which of those IDs still exist as active users in the DB.
+        // This removes ghost references left by deleted user accounts.
+        const existingUsers = await User.find({
+            _id: { $in: [...allRawAssigneeIds] },
+        }).select("_id").lean();
+        const existingUserIds = new Set(existingUsers.map((u) => u._id.toString()));
+
+        // Build a map: projectId → Set of *existing* unique assignee IDs
+        const assigneeMap = {};
+        allProjectTasks.forEach((t) => {
+            const pid = t.project?.toString();
+            if (!pid) return;
+            if (!assigneeMap[pid]) assigneeMap[pid] = new Set();
+            (t.assignees || []).forEach((a) => {
+                const aid = a.toString();
+                if (existingUserIds.has(aid)) assigneeMap[pid].add(aid);
+            });
+        });
+
+        // Attach assignedMemberCount to each project (no members/deadline exposure)
+        const projects = rawProjects.map((p) => ({
+            _id: p._id,
+            name: p.name,
+            description: p.description,
+            status: p.status,
+            createdAt: p.createdAt,
+            assignedMemberCount: (assigneeMap[p._id.toString()] || new Set()).size,
+        }));
 
         // ─── Response ───
         res.status(200).json({
