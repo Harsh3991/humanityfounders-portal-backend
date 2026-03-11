@@ -2,6 +2,7 @@ const User = require("../models/User");
 const { USER_STATUS } = require("../utils/constants");
 const { encrypt, decrypt, decryptBuffer } = require("../utils/encryptData");
 const { logAction } = require("./auditController");
+const { removeEmployeeFromSheets, renameEmployeeInSheets } = require("../services/googleSheetsService");
 
 // ═══════════════════════════════════════════════
 // GET /api/users
@@ -115,6 +116,10 @@ const updateEmployeeProfile = async (req, res, next) => {
             return res.status(404).json({ success: false, message: "User not found" });
         }
 
+        // Capture old sheet-relevant values BEFORE mutating the user document
+        const oldName = user.fullName;
+        const oldDepartment = user.department;
+
         // Update fields
         if (fullName) user.fullName = fullName;
         if (email) user.email = email;
@@ -135,6 +140,15 @@ const updateEmployeeProfile = async (req, res, next) => {
         if (ifscCode !== undefined) user.onboarding.ifscCode = ifscCode;
 
         await user.save();
+
+        // If name or department changed, propagate to Google Sheets (fire-and-forget)
+        const nameChanged = fullName && fullName !== oldName;
+        const deptChanged = department && department !== oldDepartment;
+        if (nameChanged || deptChanged) {
+            renameEmployeeInSheets(oldName, user.fullName, user.department).catch(err =>
+                console.error("Sheet rename sync failed:", err.message)
+            );
+        }
 
         // Audit Log
         await logAction({
@@ -172,12 +186,15 @@ const deleteEmployee = async (req, res, next) => {
             return res.status(400).json({ success: false, message: "You cannot delete your own account" });
         }
 
-        // Hard Delete or Soft Delete? PRD says "Revokes access immediately".
-        // We will do a soft delete by setting status to 'inactive' OR hard delete.
-        // PRD mentions "Delete" but also "Offboard". Let's support Hard Delete for now for cleanup,
-        // but typically 'inactive' is safer. Let's start with Hard Delete as per "Delete" action.
+        // Capture name before deletion for sheet cleanup
+        const deletedName = user.fullName;
 
         await user.deleteOne();
+
+        // Remove the employee's rows from ALL month sheet tabs (fire-and-forget)
+        removeEmployeeFromSheets(deletedName).catch(err =>
+            console.error("Sheet removal sync failed:", err.message)
+        );
 
         // Audit Log
         await logAction({
@@ -185,7 +202,7 @@ const deleteEmployee = async (req, res, next) => {
             performedBy: req.user._id,
             targetUserId: user._id,
             targetUser: user.email,
-            details: `Deleted user ${user.fullName} (${user.role})`
+            details: `Deleted user ${deletedName} (${user.role})`
         });
 
         res.status(200).json({
