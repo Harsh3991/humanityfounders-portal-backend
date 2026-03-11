@@ -1,0 +1,101 @@
+﻿[dotenv@17.3.1] injecting env (17) from .env -- tip: ΓÜÖ∩╕Å  override existing env vars with { override: true }
+Γ£à Connected
+
+Found users matching 'harshwardhan':
+  Harshwardhan => 69a96576a7412b6fc1f297d4
+
+Using ID: 69a96576a7412b6fc1f297d4
+
+Tasks assigned to Harshwardhan: 34
+Unique projects from those tasks: 1
+
+Projects found:
+  HF Portal (69a70347b3c6fb78182fa033)
+    Project.members count: 7
+
+≡ƒôü HF Portal (69a70347b3c6fb78182fa033)
+  Total tasks+subtasks in project: 72
+  assignedMemberCount (from task assignees): 3
+  Assignee IDs in Set:
+    - 69a725c2830a36f9c9240bf7
+    - 69a719afb10dde74a0f71829
+    - 69a96576a7412b6fc1f297d4
+
+  All tasks with their assignees:
+    [task   ] "Sprint 0: Finalizing the PRD of Portal and Initial Setup" -> [69a725c2830a36f9c9240bf7]
+    [subtask] "Task 1.1: Setup Frontend and Backend Codes in local System" -> [69a719afb10dde74a0f71829]
+    [subtask] "Task 1.2: Feedback and locking of PRD" -> [(none)]
+    [task   ] "Sprint 1: Login Page" -> [69a96576a7412b6fc1f297d4]
+    [subtask] "Research" -> [69a719afb10dde74a0f71829]
+    [subtask] "technical implementation" -> [(none)]
+    [subtask] "Task : Frontend" -> [(none)]
+    [subtask] "Task: Backend" -> [(none)]
+    [task   ] "Sprint 2: Onboarding Wizard" -> [69a96576a7412b6fc1f297d4]
+    [subtask] "Research" -> [(none)]
+    [subtask] "technical implementation" -> [(none)]
+    [subtask] "Task : Frontend" -> [(none)]
+    [subtask] "Task: Backend" -> [(none)]
+    [task   ] "Sprint 3: Dashboard" -> [69a96576a7412b6fc1f297d4]
+    [subtask] "Research" -> [(none)]
+    [subtask] "technical implementation" -> [(none)]
+    [subtask] "Task : Frontend" -> [(none)]
+    [subtask] "Dashboard API call - api/dashboardApi.js" -> [(none)]
+    [subtask] "Left navigation with brand, nav links, role-based menu" -> [(none)]
+    [subtask] "Sidebar + main content layout wrapper" -> [(none)]
+    [subtask] "Full role-based dashboard with widgets" -> [(none)]
+    [subtask] "Sidebar styling" -> [(none)]
+    [subtask] "Dashboard widgets, stats cards, task/project list styling" -> [(none)]
+    [subtask] "Task : Backend" -> [(none)]
+    [subtask] "Attendance schema (clock in/out, breaks, daily report)" -> [(none)]
+    [subtask] "Project schema (name, members, status, deadline)" -> [(none)]
+    [subtask] "Task schema (assignee, priority, status workflow)" -> [(none)]
+    [subtask] "All dashboard queries with Promise.all for parallel executio" -> [(none)]
+    [subtask] "Single endpoint delegates to correct service based on role" -> [(none)]
+    [subtask] "GET /api/dashboard (protected)" -> [(none)]
+    [task   ] "Sprint 4: Clock in/Clock out" -> [69a96576a7412b6fc1f297d4]
+    [subtask] "technical implementation" -> [(none)]
+    [subtask] "Task : Frontend" -> [(none)]
+    [subtask] "AttendanceWidget.jsx (Live Timer, Smart Buttons, Multi-Sessi" -> [(none)]
+    [subtask] "ClockOutModal.jsx" -> [(none)]
+    [subtask] "Styling (Modern badges, Blinking animation)" -> [(none)]
+    [subtask] "Task : Backend" -> [(none)]
+    [subtask] "Data Model - Attendance.js" -> [(none)]
+    [subtask] "Controller Logic - attendanceController.js" -> [(none)]
+    [task   ] "Sprint 5: Attendance Tab" -> [69a96576a7412b6fc1f297d4]
+    [task   ] "Sprint 6: People Tab" -> [69a96576a7412b6fc1f297d4]
+    [task   ] "Sprint 7: Project Management" -> [69a96576a7412b6fc1f297d4]
+    [task   ] "Sprint 8: Admin Task Oversight" -> [69a96576a7412b6fc1f297d4]
+    [task   ] "Sprint 9: Encryption and Security of data" -> [69a96576a7412b6fc1f297d4]
+    [subtask] "Task: Research (Codebase Scan, Environment Check, Library Ch" -> [(none)]
+    [subtask] "Task: technical implementation (Backend)" -> [(none)]
+    [task   ] "Sprint 10: Audit Logs" -> [69a96576a7412b6fc1f297d4]
+    [task   ] "Sprint 11: Improving Front End" -> [69a96576a7412b6fc1f297d4]
+    [task   ] "Sprint Version 1.0" -> [69a96576a7412b6fc1f297d4]
+    [task   ] "Sprint: Portal Launch and Onboarding employees" -> [69a725c2830a36f9c9240bf7, 69a96576a7412b6fc1f297d4]
+    [subtask] "Task : Launch portal in company domain" -> [69a96576a7412b6fc1f297d4]
+    [subtask] "Task: Onboarding Employee" -> [69a725c2830a36f9c9240bf7]
+    [task   ] "Sprint: Feedback and Implementation" -> [69a96576a7412b6fc1f297d4]
+    [subtask] "Task: Add new color coding for currently working in the atte" -> [69a96576a7412b6fc1f297d4]
+    [subtask] "Task: All Past date before current date not marked as presen" -> [69a96576a7412b6fc1f297d4]
+    [subtask] "Task: Letting Employee assign Assignee on tasks" -> [69a96576a7412b6fc1f297d4]
+    [subtask] "Task : Daily Updates need to have atleast have 100 character" -> [69a96576a7412b6fc1f297d4]
+    [subtask] "Task : Fix Format on how daily update appear on the Attendan" -> [69a96576a7412b6fc1f297d4]
+    [subtask] "Task: Fix how long task appear on the project tab" -> [69a96576a7412b6fc1f297d4]
+    [subtask] "Task: Task should not appear overdue on there deadline" -> [69a96576a7412b6fc1f297d4]
+    [subtask] "Task: Fix the Google sheet format" -> [69a96576a7412b6fc1f297d4]
+    [subtask] "Task: Way to rename a task" -> [69a96576a7412b6fc1f297d4]
+    [subtask] "Task : Way to switch the order of tasks" -> [69a96576a7412b6fc1f297d4]
+    [subtask] "Task: Make the Sundays on the Attendance same as any other d" -> [69a96576a7412b6fc1f297d4]
+    [subtask] "Task : Email Features for Overdue tasks and Absent days" -> [69a96576a7412b6fc1f297d4]
+    [subtask] "Task: Sending the Monthly report to each employee at end of " -> [69a96576a7412b6fc1f297d4]
+    [subtask] "Task : Option to mark a task as Deadline Extended" -> [69a96576a7412b6fc1f297d4]
+    [subtask] "Task: Bug fix: Monthly stats on dashboard" -> [69a96576a7412b6fc1f297d4]
+    [subtask] "Task: Audit and Improve the Work log page" -> [69a96576a7412b6fc1f297d4]
+    [subtask] "Task: Add a "Add Task" button on the Task Oversight tab" -> [69a96576a7412b6fc1f297d4]
+    [subtask] "Task : Optimize the Portal for Mobile screens" -> [69a96576a7412b6fc1f297d4]
+    [subtask] "Task : Allow user to multi Select task and assign person , d" -> [69a96576a7412b6fc1f297d4]
+
+≡ƒôè Final assignedMemberCount for each project:
+  HF Portal: 3
+
+Γ£à Done

@@ -33,9 +33,6 @@ async function backfillAbsences() {
 
                 if (checkDate < createdDate) continue;
 
-                // Usually skip Sundays
-                if (checkDate.getDay() === 0) continue;
-
                 const nextDay = new Date(checkDate);
                 nextDay.setDate(nextDay.getDate() + 1);
 
