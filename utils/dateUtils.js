@@ -44,3 +44,27 @@ exports.getMonthRangeIST = (month, year) => {
 
     return { start, end };
 };
+
+/**
+ * Deduplicates an array of attendance records by IST calendar day.
+ * If multiple records fall on the same IST day (e.g. a legitimate IST-midnight record
+ * at T18:30:00Z AND a spurious UTC-midnight absent record at T00:00:00Z created by a
+ * timezone-naive cron), keeps only the best one — preferring present over absent.
+ */
+exports.deduplicateByISTDay = (records) => {
+    const dayMap = new Map();
+    for (const r of records) {
+        const istDate = new Date(new Date(r.date).getTime() + IST_OFFSET);
+        const key = `${istDate.getUTCFullYear()}-${istDate.getUTCMonth()}-${istDate.getUTCDate()}`;
+        const existing = dayMap.get(key);
+        if (!existing) {
+            dayMap.set(key, r);
+        } else {
+            const isPresent = (rec) => ["clocked-in", "clocked-out", "away"].includes(rec.status);
+            if (isPresent(r) && !isPresent(existing)) {
+                dayMap.set(key, r);
+            }
+        }
+    }
+    return Array.from(dayMap.values()).sort((a, b) => new Date(a.date) - new Date(b.date));
+};

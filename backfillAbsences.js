@@ -14,38 +14,41 @@ async function backfillAbsences() {
         await connectDB();
 
         const now = new Date();
-        const year = now.getFullYear();
-        const month = now.getMonth();
+        // Derive year/month in IST to avoid UTC date shifting on production servers
+        const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+        const nowIST = new Date(now.getTime() + IST_OFFSET_MS);
+        const year = nowIST.getUTCFullYear();
+        const month = nowIST.getUTCMonth();       // 0-indexed
+        const todayISTDay = nowIST.getUTCDate();  // IST day-of-month
+
+        const { start: todayStart } = getTodayRangeIST(now);
 
         const activeUsers = await User.find({ status: "active" });
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
         for (const user of activeUsers) {
             // Do not mark absent for days before the user actually joined the system
-            const createdDate = new Date(user.createdAt);
-            createdDate.setHours(0, 0, 0, 0);
+            const { start: userJoinedStart } = getTodayRangeIST(new Date(user.createdAt));
 
-            // Iterate 1st of the month up to yesterday
-            for (let d = 1; d < today.getDate(); d++) {
-                const checkDate = new Date(year, month, d);
+            // Iterate 1st of the month up to (but not including) today in IST
+            for (let d = 1; d < todayISTDay; d++) {
+                // Use midday UTC so getTodayRangeIST reliably returns the correct IST day
+                const checkDate = new Date(Date.UTC(year, month, d, 12, 0, 0));
+                const { start: dayStart, end: dayEnd } = getTodayRangeIST(checkDate);
 
-                if (checkDate < createdDate) continue;
-
-                const nextDay = new Date(checkDate);
-                nextDay.setDate(nextDay.getDate() + 1);
+                if (dayStart < userJoinedStart) continue;
+                if (dayStart >= todayStart) continue;
 
                 const existingRecord = await Attendance.findOne({
                     user: user._id,
-                    date: { $gte: checkDate, $lt: nextDay }
+                    date: { $gte: dayStart, $lte: dayEnd }
                 });
 
                 if (!existingRecord) {
-                    console.log(`Backfilling absence for ${user.fullName} on ${checkDate.toDateString()}...`);
+                    const displayDate = new Date(dayStart.getTime() + IST_OFFSET_MS).toDateString();
+                    console.log(`Backfilling absence for ${user.fullName} on ${displayDate} (IST)...`);
                     const absentRecord = new Attendance({
                         user: user._id,
-                        date: checkDate,
+                        date: dayStart, // IST-normalized midnight date
                         status: "absent",
                         activeSeconds: 0,
                         dailyReport: "System automatically marked absent (Past no clock-in)."

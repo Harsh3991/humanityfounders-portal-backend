@@ -3,7 +3,7 @@ const Task = require("../models/Task");
 const User = require("../models/User");
 const Attendance = require("../models/Attendance");
 const { sendOverdueTaskEmail, sendAbsentEmail, sendMonthlyReportEmail } = require("./emailService");
-const { getMonthRangeIST } = require("./dateUtils");
+const { getMonthRangeIST, getTodayRangeIST } = require("./dateUtils");
 
 // ═══════════════════════════════════════════════════════════
 // Shared helper — build & send the monthly report for ONE user
@@ -108,28 +108,28 @@ const startCronJobs = () => {
                 await task.save();
             }
 
-            // 2. Process Absent Days for Yesterday
-            const yesterday = new Date();
-            yesterday.setDate(yesterday.getDate() - 1);
-            yesterday.setHours(0, 0, 0, 0);
-
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
+            // 2. Process Absent Days for Yesterday (IST-aware)
+            // IMPORTANT: Use getTodayRangeIST() so the query matches records stored with
+            // IST midnight timestamps (e.g. 2026-03-10T18:30:00Z = midnight IST March 11).
+            // Using setHours(0,0,0,0) would give UTC midnight and miss all IST records.
+            const yesterdayDate = new Date();
+            yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+            const { start: yesterdayStart, end: yesterdayEnd } = getTodayRangeIST(yesterdayDate);
 
             const activeUsers = await User.find({ status: "active" });
 
             for (const user of activeUsers) {
-                // Find if user has attendance for yesterday
+                // Find if user has attendance for yesterday using IST date boundaries
                 let record = await Attendance.findOne({
                     user: user._id,
-                    date: { $gte: yesterday, $lt: today }
+                    date: { $gte: yesterdayStart, $lte: yesterdayEnd }
                 });
 
                 // If there's no record, officially create one to trigger the sheet sync
                 if (!record) {
                     record = new Attendance({
                         user: user._id,
-                        date: yesterday,
+                        date: yesterdayStart, // IST-normalized midnight date
                         status: "absent",
                         activeSeconds: 0,
                         dailyReport: "System marked absent (No clock in/out)."

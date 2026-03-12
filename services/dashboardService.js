@@ -4,7 +4,7 @@ const Task = require("../models/Task");
 const Project = require("../models/Project");
 const { ROLES, USER_STATUS } = require("../utils/constants");
 
-const { getTodayRangeIST, getMonthRangeIST } = require("../utils/dateUtils");
+const { getTodayRangeIST, getMonthRangeIST, deduplicateByISTDay } = require("../utils/dateUtils");
 
 /**
  * Get the start and end of the current month
@@ -71,13 +71,14 @@ const getEmployeeDashboard = async (userId) => {
     const user = userObj;
 
     // Calculate monthly stats
-    const daysPresent = monthlyAttendance.filter(
+    const dedupedMonthly = deduplicateByISTDay(monthlyAttendance);
+    const daysPresent = dedupedMonthly.filter(
         (a) => a.status === "clocked-out" || a.status === "clocked-in"
     ).length;
-    const daysAbsent = monthlyAttendance.filter(
+    const daysAbsent = dedupedMonthly.filter(
         (a) => a.status === "absent"
     ).length;
-    const totalWorkingSeconds = monthlyAttendance.reduce(
+    const totalWorkingSeconds = dedupedMonthly.reduce(
         (sum, a) => sum + (a.activeSeconds || 0),
         0
     );
