@@ -3,7 +3,7 @@ const User = require("../models/User");
 const googleSheetsService = require("../services/googleSheetsService");
 const { sendAbsentEmail } = require("../utils/emailService");
 
-const { getTodayRangeIST, getMonthRangeIST } = require("../utils/dateUtils");
+const { getTodayRangeIST, getMonthRangeIST, deduplicateByISTDay } = require("../utils/dateUtils");
 
 /**
  * Helper: get today's date range in IST (Asia/Kolkata)
@@ -351,13 +351,17 @@ const getHistory = async (req, res, next) => {
 
         const { start, end } = getMonthRangeIST(month, year);
 
-        const records = await Attendance.find({
+        const rawRecords = await Attendance.find({
             user: req.user._id,
             date: { $gte: start, $lte: end },
         })
             .select("date status clockIn clockOut activeSeconds dailyReport")
             .sort({ date: 1 })
             .lean();
+
+        // Deduplicate: one record per IST day; prefer non-absent over absent.
+        // Guards against spurious absent records created by timezone-mismatched cron runs.
+        const records = deduplicateByISTDay(rawRecords);
 
         // Calculate stats
         const daysPresent = records.filter(
@@ -526,13 +530,16 @@ const getUserAttendanceHistory = async (req, res, next) => {
             return res.status(404).json({ success: false, message: "User not found" });
         }
 
-        const records = await Attendance.find({
+        const rawRecords = await Attendance.find({
             user: userId,
             date: { $gte: start, $lte: end },
         })
             .select("date status clockIn clockOut activeSeconds dailyReport")
             .sort({ date: 1 })
             .lean();
+
+        // Deduplicate: one record per IST day; prefer non-absent over absent.
+        const records = deduplicateByISTDay(rawRecords);
 
         const daysPresent = records.filter(
             (r) => ["clocked-in", "clocked-out", "away"].includes(r.status)
