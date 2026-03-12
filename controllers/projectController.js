@@ -52,18 +52,14 @@ const getAllProjects = async (req, res, next) => {
     try {
         let filter = {};
 
-        // Employees see projects they are a member of OR assigned to any task in
+        // Employees see only projects where they are assigned to at least one task
         if (req.user.role === ROLES.EMPLOYEE) {
-            // Find project IDs where this user is assigned to any task (safety net)
             const assignedProjectIds = await Task.distinct("project", {
                 assignees: req.user._id,
             });
 
             filter = {
-                $or: [
-                    { members: req.user._id },
-                    { _id: { $in: assignedProjectIds } },
-                ],
+                _id: { $in: assignedProjectIds },
             };
         }
 
