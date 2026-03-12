@@ -32,9 +32,11 @@ const getEmployeeDashboard = async (userId) => {
     const userObj = await User.findById(userId).select("fullName email role department status");
 
     const projectQuery = { status: "active" };
-    // If regular employee or manager, only show their projects. Admin/HR see all.
+    // If regular employee or manager, only show projects where they have a task assigned.
+    // Admin/HR see all active projects.
     if (userObj.role !== "admin" && userObj.role !== "hr") {
-        projectQuery.members = userId;
+        const assignedProjectIds = await Task.distinct("project", { assignees: userId });
+        projectQuery._id = { $in: assignedProjectIds };
     }
 
     // Run remaining queries in parallel for performance
