@@ -3,7 +3,7 @@ const Task = require("../models/Task");
 const User = require("../models/User");
 const Attendance = require("../models/Attendance");
 const { sendOverdueTaskEmail, sendAbsentEmail, sendMonthlyReportEmail } = require("./emailService");
-const { getMonthRangeIST, getTodayRangeIST } = require("./dateUtils");
+const { getMonthRangeIST, getTodayRangeIST, getNowIST, formatISTDate } = require("./dateUtils");
 
 // ═══════════════════════════════════════════════════════════
 // Shared helper — build & send the monthly report for ONE user
@@ -89,9 +89,15 @@ const startCronJobs = () => {
             const now = new Date();
 
             // 1. Process Overdue Tasks
+            // A task is only overdue once the entire due date (in IST) has passed.
+            // The cron fires at UTC midnight = 5:30 AM IST, so "now" is still the
+            // same IST calendar day as the due date for tasks due today.
+            // We use the start of today in IST as the cutoff so that tasks due TODAY
+            // are NOT flagged until tomorrow's cron run.
+            const { start: todayStartIST } = getTodayRangeIST(now);
             const overdueTasks = await Task.find({
                 status: { $ne: "done" },
-                dueDate: { $lt: now }, // Past the due date
+                dueDate: { $lt: todayStartIST }, // Due date's IST day has fully passed
                 overdueEmailSent: false, // Ensure we don't spam
             }).populate("assignees");
 
@@ -112,8 +118,9 @@ const startCronJobs = () => {
             // IMPORTANT: Use getTodayRangeIST() so the query matches records stored with
             // IST midnight timestamps (e.g. 2026-03-10T18:30:00Z = midnight IST March 11).
             // Using setHours(0,0,0,0) would give UTC midnight and miss all IST records.
-            const yesterdayDate = new Date();
-            yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+            // Compute yesterday in IST by subtracting 24 hours from the IST-day start of today
+            const { start: todayISTStart } = getTodayRangeIST();
+            const yesterdayDate = new Date(todayISTStart.getTime() - 1); // last ms of yesterday IST
             const { start: yesterdayStart, end: yesterdayEnd } = getTodayRangeIST(yesterdayDate);
 
             const activeUsers = await User.find({ status: "active" });
@@ -136,20 +143,10 @@ const startCronJobs = () => {
                     });
                     await record.save(); // Trigger Mongoose post-save hook to update Google Sheet
 
-                    const dateStr = yesterday.toLocaleDateString(undefined, {
-                        weekday: 'long',
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
-                    });
+                    const dateStr = formatISTDate(yesterdayStart);
                     await sendAbsentEmail(user.email, user.fullName, dateStr);
                 } else if (record.status === "absent") {
-                    const dateStr = yesterday.toLocaleDateString(undefined, {
-                        weekday: 'long',
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
-                    });
+                    const dateStr = formatISTDate(yesterdayStart);
                     await sendAbsentEmail(user.email, user.fullName, dateStr);
                 }
             }
@@ -165,15 +162,12 @@ const startCronJobs = () => {
 
     // ── Monthly report job — last day of month at 8 PM IST (14:30 UTC) ──
     const monthlyReportJob = new CronJob("30 14 28-31 * *", async function () {
-        const now       = new Date();
-        const todayDate = now.getDate();
-        const daysInThisMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        // Use IST date components — the server may be in UTC
+        const { year, month, date: todayDate } = getNowIST();
+        const daysInThisMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
 
-        // Only send on the actual last day of the month
+        // Only send on the actual last day of the month (in IST)
         if (todayDate !== daysInThisMonth) return;
-
-        const month = now.getMonth() + 1; // 1-indexed
-        const year  = now.getFullYear();
 
         console.log(`📊 Running monthly report job for ${month}/${year}...`);
 

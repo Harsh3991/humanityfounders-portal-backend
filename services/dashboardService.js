@@ -86,7 +86,9 @@ const getEmployeeDashboard = async (userId) => {
     );
 
     // Format tasks with overdue flag
-    const now = new Date();
+    // A task is overdue only once its due date's IST day has fully passed.
+    // Compare against start-of-today IST so tasks due today are NOT shown as overdue.
+    const { start: todayStartIST } = getTodayRangeIST();
     const formattedTasks = myTasks.map((task) => ({
         _id: task._id,
         name: task.name,
@@ -94,7 +96,7 @@ const getEmployeeDashboard = async (userId) => {
         dueDate: task.dueDate,
         priority: task.priority,
         status: task.status,
-        isOverdue: task.dueDate && new Date(task.dueDate) < now,
+        isOverdue: task.dueDate && new Date(task.dueDate) < todayStartIST,
     }));
 
     return {

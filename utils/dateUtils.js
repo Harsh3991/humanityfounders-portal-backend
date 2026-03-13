@@ -51,6 +51,34 @@ exports.getMonthRangeIST = (month, year) => {
  * at T18:30:00Z AND a spurious UTC-midnight absent record at T00:00:00Z created by a
  * timezone-naive cron), keeps only the best one — preferring present over absent.
  */
+/**
+ * Returns the current date/time broken down into IST components.
+ */
+exports.getNowIST = () => {
+    const now = new Date();
+    const ist = new Date(now.getTime() + IST_OFFSET);
+    return {
+        year:  ist.getUTCFullYear(),
+        month: ist.getUTCMonth() + 1, // 1-indexed
+        date:  ist.getUTCDate(),
+        hour:  ist.getUTCHours(),
+        minute: ist.getUTCMinutes(),
+    };
+};
+
+/**
+ * Formats a Date as a human-readable IST string, e.g. "Wednesday, 12 March 2026".
+ */
+exports.formatISTDate = (date) => {
+    return new Date(date).toLocaleDateString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+    });
+};
+
 exports.deduplicateByISTDay = (records) => {
     const dayMap = new Map();
     for (const r of records) {

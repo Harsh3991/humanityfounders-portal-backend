@@ -646,13 +646,16 @@ const adminOverride = async (req, res, next) => {
         }
 
         if (status === 'absent' && user.status === 'active') {
+            console.log(`[ABSENT] Marking ${user.fullName} as absent for ${date}. Sending email to ${user.email}...`);
             const displayDate = new Date(date).toLocaleDateString(undefined, {
                 weekday: 'long',
                 year: 'numeric',
                 month: 'long',
                 day: 'numeric'
             });
-            sendAbsentEmail(user.email, user.fullName, displayDate).catch(err => console.error("Immediate absent email err:", err));
+            sendAbsentEmail(user.email, user.fullName, displayDate)
+                .then(() => console.log(`[ABSENT] ✅ Absent email sent to ${user.fullName}`))
+                .catch(err => console.error(`[ABSENT] ❌ Failed to send absent email to ${user.fullName}:`, err));
         }
 
         res.status(200).json({

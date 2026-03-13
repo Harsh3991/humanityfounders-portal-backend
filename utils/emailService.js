@@ -55,7 +55,7 @@ const sendOverdueTaskEmail = async (toEmail, fullName, taskName, dueDate) => {
                     <h2 style="color: #d9534f;">Task Overdue Notice</h2>
                     <p>Hi ${fullName},</p>
                     <p>This is a notification that the task <strong>"${taskName}"</strong> assigned to you is now overdue.</p>
-                    <p><strong>Due Date:</strong> ${new Date(dueDate).toLocaleDateString()}</p>
+                    <p><strong>Due Date:</strong> ${new Date(dueDate).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', year: 'numeric', month: 'long', day: 'numeric' })}</p>
                     <p>Please mark it complete quickly in the Employee Portal, or reach out to your Manager or HR if you need assistance or an extension.</p>
                     <p>Visit the portal here: <a href="${process.env.CLIENT_URL || 'http://localhost:5173'}">${process.env.CLIENT_URL || 'http://localhost:5173'}</a></p>
                     <p style="margin-top: 30px; font-size: 0.9em; color: #777;">Regards,<br/>Humanity Founders Admin Team</p>

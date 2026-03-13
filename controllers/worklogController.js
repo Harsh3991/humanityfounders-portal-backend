@@ -3,6 +3,7 @@ const Project = require("../models/Project");
 const Task = require("../models/Task");
 const Attendance = require("../models/Attendance");
 const AuditLog = require("../models/AuditLog");
+const { getMonthRangeIST, getNowIST } = require("../utils/dateUtils");
 
 // ═══════════════════════════════════════════════
 // GET /api/users/:id/worklog
@@ -12,9 +13,9 @@ const AuditLog = require("../models/AuditLog");
 const getEmployeeWorklog = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const now = new Date();
-        const month = parseInt(req.query.month) || now.getMonth() + 1;
-        const year = parseInt(req.query.year) || now.getFullYear();
+        const nowIST = getNowIST();
+        const month = parseInt(req.query.month) || nowIST.month;
+        const year = parseInt(req.query.year) || nowIST.year;
 
         // Verify user exists
         const user = await User.findById(id).select("fullName email role department status startDate createdAt");
@@ -22,9 +23,8 @@ const getEmployeeWorklog = async (req, res, next) => {
             return res.status(404).json({ success: false, message: "User not found" });
         }
 
-        // Date range for attendance (specific month)
-        const monthStart = new Date(year, month - 1, 1);
-        const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
+        // Date range for attendance (IST-aware month boundaries)
+        const { start: monthStart, end: monthEnd } = getMonthRangeIST(month, year);
 
         // ─── Parallel fetch all data sources ───
         // Determine which projects to show by looking ONLY at current task assignments.
