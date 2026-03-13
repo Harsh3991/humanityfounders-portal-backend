@@ -2,6 +2,7 @@ const Task = require("../models/Task");
 const Project = require("../models/Project");
 const { ROLES } = require("../utils/constants");
 const { sendOverdueTaskEmail } = require("../utils/emailService");
+const { getTodayRangeIST } = require("../utils/dateUtils");
 
 // ─────────────────────────────────────────────────
 // POST /api/tasks
@@ -81,14 +82,22 @@ const createTask = async (req, res, next) => {
         await task.populate("createdBy", "fullName email");
         await task.populate("project", "name");
 
-        if (task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "done") {
-            task.overdueEmailSent = true;
-            await Task.findByIdAndUpdate(task._id, { overdueEmailSent: true });
-            for (const assignee of task.assignees) {
-                if (assignee.status === "active") {
-                    sendOverdueTaskEmail(assignee.email, assignee.fullName, task.name, task.dueDate).catch(err => console.error("Immediate overdue email err:", err));
-                }
-            }
+        const { start: todayStartIST } = getTodayRangeIST();
+        if (task.dueDate && new Date(task.dueDate) < todayStartIST && task.status !== "done") {
+            console.log(`[CREATE] Task "${task.name}" is overdue. Sending emails...`);
+            // Send emails to all active assignees; only mark flag AFTER all sends succeed
+            const activeAssignees = task.assignees.filter(a => a.status === "active");
+            console.log(`[CREATE] Active assignees: ${activeAssignees.map(a => a.fullName).join(", ")}`);
+            Promise.all(activeAssignees.map(a =>
+                sendOverdueTaskEmail(a.email, a.fullName, task.name, task.dueDate)
+            )).then(() => {
+                console.log(`[CREATE] ✅ All overdue emails sent for task "${task.name}"`);
+                Task.findByIdAndUpdate(task._id, { overdueEmailSent: true }).catch(err =>
+                    console.error("Failed to set overdueEmailSent:", err)
+                );
+            }).catch(err => console.error(`[CREATE] ❌ Overdue email error for task "${task.name}":`, err));
+        } else {
+            console.log(`[CREATE] Task "${task.name}" - No overdue email needed (due: ${task.dueDate}, status: ${task.status})`);
         }
 
         res.status(201).json({
@@ -266,13 +275,15 @@ const updateTask = async (req, res, next) => {
         if (assignees !== undefined) task.assignees = assignees;
         if (deadlineExtended !== undefined) task.deadlineExtended = deadlineExtended;
         if (dueDate !== undefined) {
+            // Check if this is an extension (moving to a later date)
             if (task.dueDate && new Date(dueDate) > new Date(task.dueDate)) {
                 task.deadlineExtended = true;
             }
+            
+            // Always reset overdueEmailSent flag when due date changes
+            // This ensures emails are sent when date is updated to any past date
+            task.overdueEmailSent = false;
             task.dueDate = dueDate;
-            if (new Date(dueDate) >= new Date()) {
-                task.overdueEmailSent = false;
-            }
         }
         if (priority !== undefined) task.priority = priority;
 
@@ -313,14 +324,22 @@ const updateTask = async (req, res, next) => {
         await task.populate("createdBy", "fullName email");
         await task.populate("project", "name");
 
-        if (task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "done" && !task.overdueEmailSent) {
-            task.overdueEmailSent = true;
-            await Task.findByIdAndUpdate(task._id, { overdueEmailSent: true });
-            for (const assignee of task.assignees) {
-                if (assignee.status === "active") {
-                    sendOverdueTaskEmail(assignee.email, assignee.fullName, task.name, task.dueDate).catch(err => console.error("Immediate overdue email err:", err));
-                }
-            }
+        const { start: todayStartIST2 } = getTodayRangeIST();
+        if (task.dueDate && new Date(task.dueDate) < todayStartIST2 && task.status !== "done" && !task.overdueEmailSent) {
+            console.log(`[UPDATE] Task "${task.name}" is overdue. Sending emails...`);
+            // Send emails to all active assignees; only mark flag AFTER all sends succeed
+            const activeAssignees2 = task.assignees.filter(a => a.status === "active");
+            console.log(`[UPDATE] Active assignees: ${activeAssignees2.map(a => a.fullName).join(", ")}`);
+            Promise.all(activeAssignees2.map(a =>
+                sendOverdueTaskEmail(a.email, a.fullName, task.name, task.dueDate)
+            )).then(() => {
+                console.log(`[UPDATE] ✅ All overdue emails sent for task "${task.name}"`);
+                Task.findByIdAndUpdate(task._id, { overdueEmailSent: true }).catch(err =>
+                    console.error("Failed to set overdueEmailSent:", err)
+                );
+            }).catch(err => console.error(`[UPDATE] ❌ Overdue email error for task "${task.name}":`, err));
+        } else {
+            console.log(`[UPDATE] Task "${task.name}" - No overdue email needed (due: ${task.dueDate}, status: ${task.status}, alreadySent: ${task.overdueEmailSent})`);
         }
 
         res.status(200).json({
